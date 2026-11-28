@@ -195,3 +195,98 @@ test('block_delta upserts streaming blocks in place and final block settles clea
     },
   ]);
 });
+
+test('citations and memory SSE events apply cleanly and wordsOf turns matching [1] markers into citation runs', () => {
+  let items: PanelItem[] = [{ type: 'person', text: 'Check SLA' }];
+  const events: StreamEvent[] = [
+    {
+      event: 'citations',
+      data: {
+        id: 'k1',
+        query: 'SLA policy',
+        items: [
+          {
+            ref: 1,
+            source: 'playbooks',
+            sourceLabel: 'Playbooks',
+            resource: 'playbook',
+            title: 'Enterprise SLA',
+            snippet: 'Response within 2 hours.',
+            address: '/compass/playbooks/1',
+          },
+          {
+            ref: 2,
+            source: 'playbooks',
+            sourceLabel: 'Playbooks',
+            resource: 'playbook',
+            title: 'Unsafe Link',
+            snippet: 'External URL dropped.',
+            address: 'https://evil.example/x',
+          },
+        ],
+      },
+    },
+    {
+      event: 'memory',
+      data: { id: 'm1', action: 'remembered', memoryId: 'mem-1', scope: 'person', content: 'Prefer concise bullets.' },
+    },
+    { event: 'text', data: { delta: 'Respond within 2 hours [1]. Unknown [9] stays plain.' } },
+    { event: 'done', data: { state: 'idle' } },
+  ];
+  for (const event of events) items = applyEvent(items, event);
+  expect(items[1]).toEqual({
+    type: 'citations',
+    id: 'k1',
+    query: 'SLA policy',
+    items: [
+      {
+        ref: 1,
+        source: 'playbooks',
+        sourceLabel: 'Playbooks',
+        resource: 'playbook',
+        title: 'Enterprise SLA',
+        snippet: 'Response within 2 hours.',
+        address: '/compass/playbooks/1',
+      },
+      {
+        ref: 2,
+        source: 'playbooks',
+        sourceLabel: 'Playbooks',
+        resource: 'playbook',
+        title: 'Unsafe Link',
+        snippet: 'External URL dropped.',
+      },
+    ],
+  });
+  expect(items[2]).toEqual({
+    type: 'memory',
+    id: 'm1',
+    action: 'remembered',
+    memoryId: 'mem-1',
+    scope: 'person',
+    content: 'Prefer concise bullets.',
+  });
+  expect(wordsOf('Respond within 2 hours [1]. Unknown [9] stays plain.', new Set([1]))).toEqual([
+    {
+      list: false,
+      lines: [
+        [{ text: 'Respond within 2 hours ' }, { text: '[1]', cite: 1 }, { text: '. Unknown ' }, { text: '[9]' }, { text: ' stays plain.' }],
+      ],
+    },
+  ]);
+  const turnGrouped = grouped([
+    { type: 'person', text: 'Check SLA' },
+    { type: 'step', id: 'k1', tool: 'search_knowledge', label: 'Found 1 source' },
+    items[1],
+    { type: 'step', id: 'm1', tool: 'remember', label: 'Remembered' },
+    items[2],
+    { type: 'text', text: 'Respond within 2 hours [1].' },
+  ]);
+  expect(turnGrouped.map((entry) => (entry.type === 'steps' ? `steps:${entry.steps.length}` : entry.item.type))).toEqual([
+    'person',
+    'steps:2',
+    'text',
+    'citations',
+    'memory',
+  ]);
+});

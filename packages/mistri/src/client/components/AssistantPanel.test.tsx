@@ -989,3 +989,684 @@ test('multi-agent switcher changes starters and sends agent id; delegation card 
   await user.click(screen.getByRole('button', { name: 'Close Canvas' }));
   expect(screen.queryByRole('region', { name: 'Canvas' })).not.toBeInTheDocument();
 });
+
+test('Wave 2A: renders inline clickable citations, Sources strip, memory chip, and interactive Memory Drawer', async () => {
+  const user = userEvent.setup();
+  let storedMemories: Array<{
+    id: string;
+    scope: 'person' | 'app';
+    agent: string;
+    content: string;
+    source: 'assistant' | 'person';
+    createdAt: string;
+    updatedAt: string;
+  }> = [
+    {
+      id: 'm_personal_1',
+      scope: 'person',
+      agent: '',
+      content: 'Prefer concise executive bullet points.',
+      source: 'assistant',
+      createdAt: '2026-11-27T10:00:00Z',
+      updatedAt: '2026-11-27T10:00:00Z',
+    },
+    {
+      id: 'm_shared_1',
+      scope: 'app',
+      agent: '',
+      content: 'Enterprise renewals require 60-day advance legal review.',
+      source: 'person',
+      createdAt: '2026-11-27T09:00:00Z',
+      updatedAt: '2026-11-27T09:00:00Z',
+    },
+  ];
+  mocks.app = {
+    id: 'compass',
+    name: 'Compass',
+    resources: {},
+    views: {},
+    assistant: {
+      memory: { scopes: ['person', 'app'], maxItems: 50, canWriteShared: true },
+      knowledge: [{ id: 'playbooks', resource: 'playbook', description: 'Sales playbooks' }],
+    },
+  };
+  fetcher.mockImplementation(async (url, init) => {
+    const path = String(url);
+    if (path.startsWith('/api/assistant?')) return json({ conversations: [], ready: true });
+    if (path.startsWith('/api/assistant/memories?') && (!init?.method || init.method === 'GET')) {
+      return json({ memories: storedMemories, scopes: ['person', 'app'], maxItems: 50, canWriteShared: true });
+    }
+    if (path === '/api/assistant/memories' && init?.method === 'POST') {
+      const payload = JSON.parse(String(init.body)) as { content: string; scope: 'person' | 'app'; id?: string };
+      const added = {
+        id: payload.id ?? 'm_new_1',
+        scope: payload.scope,
+        agent: '',
+        content: payload.content,
+        source: 'person' as const,
+        createdAt: '2026-11-27T11:00:00Z',
+        updatedAt: '2026-11-27T11:00:00Z',
+      };
+      storedMemories = [...storedMemories, added];
+      return json({ memory: added, updated: false });
+    }
+    if (path === '/api/assistant/memories/delete' && init?.method === 'POST') {
+      const payload = JSON.parse(String(init.body)) as { id: string };
+      storedMemories = storedMemories.filter((m) => m.id !== payload.id);
+      return json({ deleted: true });
+    }
+    if (path === '/api/assistant/turn') {
+      return events(
+        ['conversation', { id: 'c_w2', title: 'Renewal policy', person: 1 }],
+        [
+          'citations',
+          {
+            id: 'cit_1',
+            query: 'enterprise renewal',
+            items: [
+              {
+                ref: 1,
+                source: 'playbooks',
+                sourceLabel: 'Playbooks',
+                resource: 'playbook',
+                title: 'Enterprise Renewal Playbook',
+                snippet: 'Start executive alignment 60 days prior to renewal date.',
+                address: '/compass/playbooks/1',
+              },
+            ],
+          },
+        ],
+        [
+          'memory',
+          {
+            id: 'mem_ev_1',
+            action: 'remembered',
+            memoryId: 'm_personal_1',
+            scope: 'person',
+            content: 'Prefer concise executive bullet points.',
+          },
+        ],
+        ['text', { delta: 'Per the renewal playbook [1], start alignment 60 days ahead.' }],
+        ['done', { state: 'idle', tokens: 18 }],
+      );
+    }
+    return json({ error: 'unexpected' }, 404);
+  });
+
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+  const box = await screen.findByRole('textbox', { name: 'Message the assistant' });
+  await user.type(box, 'What is our enterprise renewal process?{Enter}');
+
+  // Inline citation pill [1], Sources strip, and Remembered chip all render.
+  expect(await screen.findByRole('button', { name: 'Open Enterprise Renewal Playbook' })).toBeInTheDocument();
+  expect(screen.getByRole('region', { name: 'Cited sources' })).toBeInTheDocument();
+  expect(screen.getByText('Enterprise Renewal Playbook')).toBeInTheDocument();
+  expect(screen.getByText('Remembered')).toBeInTheDocument();
+
+  // Open Memory Drawer from the Remembered chip's Manage button.
+  await user.click(screen.getByRole('button', { name: 'Manage' }));
+  expect(await screen.findByRole('region', { name: 'Assistant memory' })).toBeInTheDocument();
+  expect(await screen.findByText('Prefer concise executive bullet points.')).toBeInTheDocument();
+  expect(screen.getByText('Enterprise renewals require 60-day advance legal review.')).toBeInTheDocument();
+
+  // Add a new memory inside the drawer.
+  await user.type(screen.getByRole('textbox', { name: 'Add memory' }), 'Highlight churn risk first.');
+  await user.click(screen.getByRole('button', { name: 'Save' }));
+  expect(await screen.findByText('Highlight churn risk first.')).toBeInTheDocument();
+
+  // Close drawer cleanly.
+  await user.click(screen.getByRole('button', { name: 'Close memory' }));
+  expect(screen.queryByRole('region', { name: 'Assistant memory' })).not.toBeInTheDocument();
+});
+
+test('Wave 2B: Runs header badge, Run Monitor presets, live trace, approval checkpoint confirm & resume, and Open in chat', async () => {
+  const user = userEvent.setup();
+  let runStatus: 'running' | 'awaiting' | 'completed' = 'awaiting';
+  let resolvedProposal = false;
+  let updatedRecord = false;
+  const runsList = () => [
+    {
+      id: 'run_1',
+      conversation: 'conv_run_1',
+      title: 'Pipeline Risk Audit',
+      prompt: 'Audit enterprise deals at risk of slipping.',
+      agent: 'deal_desk',
+      preset: 'pipeline_audit',
+      status: runStatus,
+      steps: 3,
+      tokens: 420,
+      summary:
+        runStatus === 'completed'
+          ? 'Escalated Acme renewal and logged audit summary.'
+          : 'Waiting for confirmation to mark Acme renewal at risk.',
+      createdAt: '2026-11-27T10:00:00Z',
+      updatedAt: '2026-11-27T10:05:00Z',
+      finishedAt: runStatus === 'completed' ? '2026-11-27T10:06:00Z' : '',
+      live: false,
+    },
+  ];
+
+  mocks.app = {
+    id: 'compass',
+    name: 'Compass',
+    resources: {},
+    views: {},
+    assistant: {
+      agents: [{ id: 'deal_desk', name: 'Deal Desk' }],
+      defaultAgent: 'deal_desk',
+      backgroundRuns: {
+        maxConcurrent: 2,
+        maxSteps: 12,
+        presets: [
+          {
+            id: 'pipeline_audit',
+            label: 'Pipeline Risk Audit',
+            description: 'Scan open deals and flag renewal risks.',
+            agent: 'deal_desk',
+          },
+        ],
+      },
+    },
+  };
+
+  fetcher.mockImplementation(async (url, init) => {
+    const path = String(url);
+    if (path.startsWith('/api/assistant?')) {
+      return json({
+        conversations: [{ id: 'conv_run_1', title: 'Pipeline Risk Audit', updatedAt: '2026-11-27T10:06:00Z' }],
+        ready: true,
+      });
+    }
+    if (path.startsWith('/api/assistant/runs?')) {
+      return json({ runs: runsList(), ready: true });
+    }
+    if (path.startsWith('/api/assistant/runs/detail?')) {
+      return json({
+        run: runsList()[0],
+        items: [
+          { type: 'person', seq: 1, text: 'Audit enterprise deals at risk of slipping.' },
+          { type: 'step', id: 's1', tool: 'query', label: 'Reading leads' },
+          {
+            type: 'proposal',
+            id: 'prop_bg_1',
+            proposal: {
+              id: 'prop_bg_1',
+              kind: 'set',
+              resource: 'lead',
+              action: 'flag_risk',
+              label: 'Flag renewal risk',
+              key: { id: 1 },
+              record: 'Acme Corp',
+              values: { status: 'at_risk' },
+              why: 'No executive touchpoint within 30 days of renewal.',
+            },
+            ...(resolvedProposal ? { outcome: { status: 'done' } } : {}),
+          },
+          ...(runStatus === 'completed' ? [{ type: 'text', text: 'Escalated Acme renewal and logged audit summary.' }] : []),
+        ],
+        awaiting: runStatus === 'awaiting',
+      });
+    }
+    if (path === '/api/update' && init?.method === 'POST') {
+      updatedRecord = true;
+      return json({ ok: true });
+    }
+    if (path === '/api/assistant/runs/resolve' && init?.method === 'POST') {
+      resolvedProposal = true;
+      runStatus = 'completed';
+      return json({ run: { ...runsList()[0], status: 'running', live: true } }, 202);
+    }
+    if (path.startsWith('/api/assistant/runs/stream?')) {
+      return events(
+        ['run_status', { run: { ...runsList()[0], status: 'completed', live: false } }],
+        ['text', { delta: 'Escalated Acme renewal and logged audit summary.' }],
+        ['done', { state: 'completed', tokens: 420 }],
+      );
+    }
+    if (path.startsWith('/api/assistant/conversation?')) {
+      return json({
+        conversation: { id: 'conv_run_1', title: 'Pipeline Risk Audit' },
+        items: [
+          { type: 'person', seq: 1, text: 'Audit enterprise deals at risk of slipping.' },
+          { type: 'text', text: 'Escalated Acme renewal and logged audit summary.' },
+        ],
+      });
+    }
+    return json({ error: 'unexpected' }, 404);
+  });
+
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+
+  // Header shows live active Runs · 1 indicator.
+  const runsBtn = await screen.findByRole('button', { name: 'Runs · 1' });
+  await user.click(runsBtn);
+
+  // Run Monitor opens with preset strip and durable runs list.
+  expect(await screen.findByRole('region', { name: 'Background runs' })).toBeInTheDocument();
+  expect(screen.getByText('Quick runs')).toBeInTheDocument();
+  expect(screen.getByText('Awaiting approval')).toBeInTheDocument();
+
+  // Inspect the awaiting run and confirm the approval checkpoint.
+  await user.click(screen.getByRole('button', { name: 'Inspect' }));
+  expect(await screen.findByText(/Paused at a write checkpoint/i)).toBeInTheDocument();
+  expect(screen.getByText('Flag renewal risk · Acme Corp')).toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'Confirm & resume' }));
+  expect(await screen.findByText('Escalated Acme renewal and logged audit summary.')).toBeInTheDocument();
+  expect(updatedRecord).toBe(true);
+
+  // Jump straight from Run Monitor into the full interactive conversation.
+  await user.click(screen.getByRole('button', { name: 'Open in chat' }));
+  expect(screen.queryByRole('region', { name: 'Pipeline Risk Audit' })).not.toBeInTheDocument();
+  expect(await screen.findByText('Escalated Acme renewal and logged audit summary.')).toBeInTheDocument();
+});
+
+test('Wave 2C: Run Monitor Automations tab lists schedules & triggers, toggles enablement, and dispatches Run now', async () => {
+  const user = userEvent.setup();
+  let scheduleEnabled = true;
+  let runs: Array<Record<string, unknown>> = [
+    {
+      id: 'run_trig_1',
+      conversation: 'conv_trig_1',
+      title: 'Inbound Lead Triage',
+      prompt: 'Investigate new lead',
+      agent: 'deal_desk',
+      source: 'trigger:new_lead',
+      status: 'completed',
+      steps: 2,
+      tokens: 310,
+      summary: 'Triaged Stark Industries inbound lead.',
+      createdAt: '2026-11-27T10:00:00Z',
+      updatedAt: '2026-11-27T10:02:00Z',
+      finishedAt: '2026-11-27T10:02:00Z',
+      live: false,
+    },
+  ];
+
+  mocks.app = {
+    id: 'compass',
+    name: 'Compass',
+    resources: {},
+    views: {},
+    assistant: {
+      agents: [{ id: 'deal_desk', name: 'Deal Desk' }],
+      defaultAgent: 'deal_desk',
+      backgroundRuns: {
+        maxConcurrent: 3,
+        maxSteps: 16,
+        presets: [],
+        schedules: [
+          {
+            id: 'morning_brief',
+            label: 'Morning Pipeline Brief',
+            description: 'Weekday 8:30 AM slippage summary.',
+            every: '30 8 * * 1-5',
+            timezone: 'America/New_York',
+            agent: 'deal_desk',
+            enabled: true,
+          },
+        ],
+        triggers: [
+          {
+            id: 'new_lead',
+            label: 'Inbound Lead Triage',
+            description: 'Auto-triage newly created leads.',
+            resource: 'lead',
+            on: ['create'],
+            agent: 'deal_desk',
+            enabled: true,
+            cooldownSeconds: 60,
+          },
+        ],
+      },
+    },
+  };
+
+  fetcher.mockImplementation(async (url, init) => {
+    const path = String(url);
+    if (path.startsWith('/api/assistant?')) return json({ conversations: [], ready: true });
+    if (path.startsWith('/api/assistant/runs?')) return json({ runs, ready: true });
+    if (path.startsWith('/api/assistant/automations?')) {
+      return json({
+        schedules: [
+          {
+            id: 'morning_brief',
+            label: 'Morning Pipeline Brief',
+            description: 'Weekday 8:30 AM slippage summary.',
+            every: '30 8 * * 1-5',
+            timezone: 'America/New_York',
+            agent: 'deal_desk',
+            enabled: scheduleEnabled,
+            nextRunAt: scheduleEnabled ? '2026-11-30T13:30:00.000Z' : null,
+            lastRunId: null,
+            lastRunAt: null,
+          },
+        ],
+        triggers: [
+          {
+            id: 'new_lead',
+            label: 'Inbound Lead Triage',
+            description: 'Auto-triage newly created leads.',
+            resource: 'lead',
+            on: ['create'],
+            agent: 'deal_desk',
+            cooldownSeconds: 60,
+            enabled: true,
+            lastRunId: 'run_trig_1',
+            lastRunAt: '2026-11-27T10:02:00Z',
+          },
+        ],
+        ready: true,
+      });
+    }
+    if (path === '/api/assistant/automations/toggle' && init?.method === 'POST') {
+      const payload = JSON.parse(String(init.body)) as { enabled: boolean };
+      scheduleEnabled = payload.enabled;
+      return json({ automation: { kind: 'schedule', automationId: 'morning_brief', enabled: scheduleEnabled } });
+    }
+    if (path === '/api/assistant/automations/run' && init?.method === 'POST') {
+      const added = {
+        id: 'run_sched_1',
+        conversation: 'conv_sched_1',
+        title: 'Morning Pipeline Brief',
+        prompt: 'Morning pipeline brief',
+        agent: 'deal_desk',
+        source: 'schedule:morning_brief',
+        status: 'completed',
+        steps: 1,
+        tokens: 180,
+        summary: 'Morning pipeline summary ready.',
+        createdAt: '2026-11-27T11:00:00Z',
+        updatedAt: '2026-11-27T11:00:05Z',
+        finishedAt: '2026-11-27T11:00:05Z',
+        live: false,
+      };
+      runs = [added, ...runs];
+      return json({ run: added }, 202);
+    }
+    if (path.startsWith('/api/assistant/runs/detail?')) {
+      return json({
+        run: runs[0],
+        items: [{ type: 'text', text: 'Morning pipeline summary ready.' }],
+      });
+    }
+    return json({ error: 'unexpected' }, 404);
+  });
+
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+
+  await user.click(await screen.findByRole('button', { name: 'Runs' }));
+  expect(await screen.findByText(/Triggered · Deal Desk/)).toBeInTheDocument();
+
+  // Switch to Automations tab.
+  await user.click(screen.getByRole('tab', { name: 'Automations · 2' }));
+  expect(await screen.findByText('Morning Pipeline Brief')).toBeInTheDocument();
+  expect(screen.getByText('30 8 * * 1-5 · America/New_York')).toBeInTheDocument();
+  expect(screen.getByText('lead · create')).toBeInTheDocument();
+
+  // Toggle schedule off -> switches to Paused.
+  await user.click(screen.getByRole('switch', { name: 'Toggle Morning Pipeline Brief' }));
+  expect(await screen.findByText(/Paused/)).toBeInTheDocument();
+
+  // Click Run now -> dispatches run and opens its trace detail.
+  await user.click(screen.getByRole('button', { name: 'Run now' }));
+  expect(await screen.findByText('Morning pipeline summary ready.')).toBeInTheDocument();
+});
+
+test('Wave 3A: Run Monitor Trace tab inspects execution spans and Evals tab runs graded scorecards', async () => {
+  const user = userEvent.setup();
+  const sampleRun = {
+    id: 'run_trace_1',
+    conversation: 'conv_trace_1',
+    title: 'Pipeline Risk Audit',
+    prompt: 'Audit open deals',
+    agent: 'analyst',
+    source: 'preset:pipeline_audit',
+    status: 'completed',
+    steps: 1,
+    tokens: 1420,
+    summary: 'Q3 pipeline audit completed.',
+    createdAt: '2026-11-27T10:00:00Z',
+    updatedAt: '2026-11-27T10:00:02Z',
+    finishedAt: '2026-11-27T10:00:02Z',
+    live: false,
+  };
+  const sampleTrace = {
+    totalSteps: 1,
+    toolCalls: 1,
+    failedTools: 0,
+    blocksEmitted: 0,
+    citationsCount: 2,
+    proposalsCount: 0,
+    reasoningChars: 84,
+    tokensIn: 1120,
+    tokensOut: 300,
+    totalTokens: 1420,
+    durationMs: 1850,
+    toolBreakdown: { search_knowledge: 1 },
+    spans: [
+      { index: 1, kind: 'reasoning', name: 'Reasoning', status: 'ok', durationMs: 420, summary: 'Check security notes.' },
+      {
+        index: 2,
+        kind: 'tool',
+        name: 'search_knowledge',
+        status: 'ok',
+        input: { query: 'security' },
+        outputPreview: '2 records matched.',
+        citations: 2,
+      },
+      { index: 3, kind: 'answer', name: 'Assistant response', status: 'ok', summary: 'Q3 pipeline audit completed.' },
+    ],
+  };
+
+  mocks.app = {
+    id: 'compass',
+    name: 'Compass',
+    resources: {},
+    views: {},
+    assistant: {
+      agents: [{ id: 'analyst', name: 'Pipeline Analyst' }],
+      defaultAgent: 'analyst',
+      backgroundRuns: { maxConcurrent: 2, maxSteps: 16, presets: [] },
+      evals: [
+        {
+          id: 'security_grounding',
+          label: 'Security Review Grounding',
+          description: 'Verifies knowledge citations and reasoning.',
+          prompt: 'Audit open deals',
+          agent: 'analyst',
+          expect: { expectedTools: ['search_knowledge'], expectCitations: true, maxSteps: 4 },
+        },
+      ],
+    },
+  };
+
+  fetcher.mockImplementation(async (input, init) => {
+    const path = String(input);
+    const method = (init?.method ?? 'GET').toUpperCase();
+    if (path.startsWith('/api/assistant?')) return json({ conversations: [], ready: true });
+    if (path.startsWith('/api/assistant/runs?')) return json({ runs: [sampleRun], ready: true });
+    if (path.startsWith('/api/assistant/runs/detail?')) {
+      return json({ run: sampleRun, items: [{ type: 'text', text: 'Q3 pipeline audit completed.' }] });
+    }
+    if (path.startsWith('/api/assistant/runs/trace?')) {
+      return json({ run: sampleRun, trace: sampleTrace });
+    }
+    if (path === '/api/assistant/evals/run' && method === 'POST') {
+      return json({
+        report: {
+          appId: 'compass',
+          ranAt: '2026-11-27T12:00:00Z',
+          total: 1,
+          passed: 1,
+          failed: 0,
+          passRate: 1,
+          meanTokens: 1420,
+          meanDurationMs: 1850,
+          cases: [
+            {
+              id: 'security_grounding',
+              label: 'Security Review Grounding',
+              agent: 'analyst',
+              passed: true,
+              failures: [],
+              answer: 'Q3 pipeline audit completed.',
+              durationMs: 1850,
+              trace: sampleTrace,
+            },
+          ],
+        },
+      });
+    }
+    return json({ error: 'unexpected' }, 404);
+  });
+
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+
+  await user.click(await screen.findByRole('button', { name: 'Runs' }));
+
+  // 1. Inspect run detail -> switch to Trace tab -> verify structured spans & metrics.
+  await user.click(await screen.findByRole('button', { name: 'Inspect' }));
+  await user.click(await screen.findByRole('tab', { name: 'Trace' }));
+  expect(await screen.findByText('search_knowledge')).toBeInTheDocument();
+  expect(screen.getByText('2 cited')).toBeInTheDocument();
+
+  // 2. Return to monitor -> open Evals · 1 tab -> run all evals -> verify scorecard & pass status.
+  await user.click(screen.getByRole('button', { name: /All runs/i }));
+  await user.click(await screen.findByRole('tab', { name: 'Evals · 1' }));
+  expect(await screen.findByText('Security Review Grounding')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Run all evals' }));
+  expect(await screen.findByText('100%')).toBeInTheDocument();
+  expect(screen.getByText('1/1')).toBeInTheDocument();
+});
+
+test('Wave 3B: Automations shows External tools & MCP and Inbound webhooks, and confirms external write checkpoints', async () => {
+  const user = userEvent.setup();
+  const executed: Array<{ path: string; body: unknown }> = [];
+  const awaitingRun = {
+    id: 'run_ext_1',
+    conversation: 'conv_ext_1',
+    title: 'GitHub Release Sync',
+    prompt: 'Notify Slack release channel',
+    agent: 'analyst',
+    source: 'webhook:github_release',
+    status: 'awaiting',
+    steps: 1,
+    tokens: 610,
+    summary: 'Waiting for approval to post Slack release alert.',
+    createdAt: '2026-11-27T11:00:00Z',
+    updatedAt: '2026-11-27T11:00:01Z',
+    finishedAt: '',
+    live: false,
+  };
+  const completedRun = { ...awaitingRun, status: 'completed', finishedAt: '2026-11-27T11:00:05Z' };
+
+  mocks.app = {
+    id: 'compass',
+    name: 'Compass',
+    resources: {},
+    views: {},
+    assistant: {
+      agents: [{ id: 'analyst', name: 'Release Analyst' }],
+      defaultAgent: 'analyst',
+      backgroundRuns: { maxConcurrent: 2, maxSteps: 12, presets: [] },
+      externalTools: [
+        {
+          id: 'lookup_github_pr',
+          label: 'Lookup GitHub PR',
+          description: 'Read pull request status over MCP.',
+          kind: 'mcp',
+          method: 'POST',
+          mcpTool: 'get_pull_request',
+          access: 'read',
+        },
+        {
+          id: 'post_slack_alert',
+          label: 'Post Slack Alert',
+          description: 'Send release alert to Slack after confirmation.',
+          kind: 'http',
+          method: 'POST',
+          access: 'write',
+        },
+      ],
+      webhooks: [
+        {
+          id: 'github_release',
+          label: 'GitHub Release Webhook',
+          description: 'Starts a release brief when a signed GitHub release arrives.',
+          signatureHeader: 'x-hub-signature-256',
+          agent: 'analyst',
+          enabled: true,
+        },
+      ],
+    },
+  };
+
+  fetcher.mockImplementation(async (input, init) => {
+    const path = String(input);
+    const method = (init?.method ?? 'GET').toUpperCase();
+    const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+    if (path.startsWith('/api/assistant?')) return json({ conversations: [], ready: true });
+    if (path.startsWith('/api/assistant/runs?')) return json({ runs: [awaitingRun], ready: true });
+    if (path.startsWith('/api/assistant/runs/detail?')) {
+      return json({
+        run: awaitingRun,
+        items: [
+          {
+            type: 'proposal',
+            id: 'prop_ext_1',
+            proposal: {
+              id: 'prop_ext_1',
+              kind: 'external',
+              resource: 'http',
+              action: 'post_slack_alert',
+              label: 'Post Slack Alert',
+              values: { channel: '#releases', text: 'v2.4 shipped' },
+              why: 'Notify engineering about the verified release tag.',
+            },
+          },
+        ],
+      });
+    }
+    if (path === '/api/assistant/external/execute' && method === 'POST') {
+      executed.push({ path, body });
+      return json({ ok: true, status: 200, output: '{"ok":true,"ts":"1700000.1"}' });
+    }
+    if (path === '/api/assistant/runs/resolve' && method === 'POST') {
+      executed.push({ path, body });
+      return json({ run: completedRun });
+    }
+    if (path.startsWith('/api/assistant/runs/stream?')) {
+      return events(['run_status', { run: completedRun }], ['done', { state: 'idle' }]);
+    }
+    return json({ error: 'unexpected' }, 404);
+  });
+
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+  await user.click(await screen.findByRole('button', { name: 'Runs' }));
+
+  // 1. Webhook origin whisper shows in Runs list & Automations tab lists external tools/MCP + webhooks.
+  expect(await screen.findByText(/Webhook/)).toBeInTheDocument();
+  await user.click(await screen.findByRole('tab', { name: 'Automations · 3' }));
+  expect(await screen.findByText('External tools & MCP')).toBeInTheDocument();
+  expect(screen.getByText('mcp · get_pull_request')).toBeInTheDocument();
+  expect(screen.getByText('Inbound webhooks')).toBeInTheDocument();
+  expect(screen.getByText('POST /api/assistant/webhooks/compass/github_release')).toBeInTheDocument();
+  expect(screen.getByText(/HMAC-SHA256 · x-hub-signature-256/)).toBeInTheDocument();
+
+  // 2. Switch back to Runs, inspect awaiting external write checkpoint, and confirm it.
+  await user.click(screen.getByRole('tab', { name: 'Runs' }));
+  await user.click(await screen.findByRole('button', { name: 'Inspect' }));
+  expect(await screen.findByText('Post Slack Alert')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Confirm & resume' }));
+
+  await vi.waitFor(() => {
+    expect(executed.map((e) => e.path)).toEqual(['/api/assistant/external/execute', '/api/assistant/runs/resolve']);
+  });
+  expect(executed[0].body).toEqual({
+    app: 'compass',
+    tool: 'post_slack_alert',
+    input: { channel: '#releases', text: 'v2.4 shipped' },
+  });
+  expect((executed[1].body as { outcome: string }).outcome).toBe('done');
+});

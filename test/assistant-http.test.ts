@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
 import { once } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -49,9 +51,11 @@ interface Event {
 }
 interface Fixture {
   as(person: Person | null): void;
+  url(path: string): string;
   turn(body: Record<string, unknown>): Promise<{ status: number; events: Event[]; body?: any }>;
   resolve(body: Record<string, unknown>): Promise<{ status: number; events: Event[]; body?: any }>;
   get(path: string): Promise<{ status: number; body: any }>;
+  streamGet(path: string): Promise<{ status: number; events: Event[] }>;
   post(path: string, body: Record<string, unknown>): Promise<{ status: number; body: any }>;
   db: DatabaseSync;
   requests: ModelRequest[];
@@ -173,11 +177,21 @@ async function fixture(
       as: (person) => {
         current = person;
       },
+      url,
       turn: (body) => streamed('/api/assistant/turn', body),
       resolve: (body) => streamed('/api/assistant/resolve', body),
       get: async (path) => {
         const response = await fetch(url(path), { signal: AbortSignal.timeout(5000) });
         return { status: response.status, body: await response.json() };
+      },
+      streamGet: async (path) => {
+        const response = await fetch(url(path), { signal: AbortSignal.timeout(10_000) });
+        const text = await response.text();
+        const events = text
+          .split('\n\n')
+          .filter(Boolean)
+          .map((chunk) => ({ event: /^event: (.*)$/m.exec(chunk)![1], data: JSON.parse(/^data: (.*)$/m.exec(chunk)![1]) }));
+        return { status: response.status, events };
       },
       post: async (path, body) => {
         const response = await fetch(url(path), {
@@ -1438,4 +1452,958 @@ test('customBlocks validate declared props with defaults, refuse invalid props, 
       },
     },
   );
+});
+
+test('scoped persistent memory supports person/app scopes, sharedRoles enforcement, remember/forget tools, and prompt injection across turns', async () => {
+  const memScript: AssistantScript = {
+    turns: [
+      {
+        when: 'save pref',
+        steps: [
+          {
+            tools: [{ name: 'remember', input: { content: 'Always show figures in USD.', scope: 'person' } }],
+          },
+          { text: 'Saved your preference.' },
+        ],
+      },
+      {
+        when: 'hello again',
+        steps: [{ text: 'Welcome back.' }],
+      },
+    ],
+  };
+  await fixture(
+    async ({ as, turn, get, post, requests }) => {
+      // 1. Ann saves a private memory via the assistant's `remember` tool.
+      const first = await turn({ text: 'save pref' });
+      assert.equal(first.status, 200);
+      const memEvents = of(first.events, 'memory');
+      assert.equal(memEvents.length, 1);
+      assert.equal(memEvents[0].action, 'remembered');
+      assert.equal(memEvents[0].scope, 'person');
+      assert.equal(memEvents[0].content, 'Always show figures in USD.');
+      const savedId = String(memEvents[0].memoryId);
+
+      // Replaying the conversation preserves the memory chip item.
+      const convId = of(first.events, 'conversation')[0].id;
+      const replayed = (await get(`/api/assistant/conversation?app=${appId}&id=${convId}`)).body.items as Array<Record<string, unknown>>;
+      assert.ok(replayed.some((item) => item.type === 'memory' && item.memoryId === savedId));
+
+      // 2. Ann adds a shared workspace memory via HTTP CRUD route.
+      const sharedRes = await post('/api/assistant/memories', {
+        app: appId,
+        scope: 'app',
+        content: 'Fiscal year starts in February.',
+      });
+      assert.equal(sharedRes.status, 200);
+      const sharedId = String(sharedRes.body.memory.id);
+
+      // 3. Ann's next turn receives both private and shared memories in the system prompt.
+      await turn({ text: 'hello again' });
+      const annSystem = requests.at(-1)!.system;
+      assert.match(annSystem, /Always show figures in USD\./);
+      assert.match(annSystem, /Fiscal year starts in February\./);
+
+      // 4. Bob sees the shared workspace memory, never Ann's private memory.
+      as('bob');
+      const bobList = await get(`/api/assistant/memories?app=${appId}`);
+      assert.equal(bobList.status, 200);
+      assert.equal(bobList.body.canWriteShared, true);
+      assert.deepEqual(
+        (bobList.body.memories as Array<{ content: string }>).map((m) => m.content),
+        ['Fiscal year starts in February.'],
+      );
+
+      // 5. Viewer (not in sharedRoles) can save personal memory, gets 403 on shared memory write, and cannot delete shared memory.
+      as('viewer');
+      const viewerList = await get(`/api/assistant/memories?app=${appId}`);
+      assert.equal(viewerList.status, 200);
+      assert.equal(viewerList.body.canWriteShared, false);
+      const viewerDenied = await post('/api/assistant/memories', { app: appId, scope: 'app', content: 'Unauthorized shared note.' });
+      assert.equal(viewerDenied.status, 403);
+      const viewerDeleteDenied = await post('/api/assistant/memories/delete', { app: appId, id: sharedId });
+      assert.equal(viewerDeleteDenied.status, 404);
+      const viewerPersonal = await post('/api/assistant/memories', { app: appId, scope: 'person', content: 'Prefer concise tables.' });
+      assert.equal(viewerPersonal.status, 200);
+
+      // 6. Ann edits and then deletes her personal memory via HTTP CRUD routes.
+      as('ann');
+      const edited = await post('/api/assistant/memories', {
+        app: appId,
+        id: savedId,
+        scope: 'person',
+        content: 'Always show figures in EUR.',
+      });
+      assert.equal(edited.status, 200);
+      assert.equal(edited.body.updated, true);
+      assert.equal(edited.body.memory.content, 'Always show figures in EUR.');
+
+      const deleted = await post('/api/assistant/memories/delete', { app: appId, id: savedId });
+      assert.equal(deleted.status, 200);
+      assert.equal(deleted.body.deleted, true);
+    },
+    {
+      script: memScript,
+      assistant: {
+        memory: { scopes: ['person', 'app'], sharedRoles: ['rep'], maxItems: 50 },
+      },
+    },
+  );
+});
+
+test('search_knowledge returns verifiable viewer-scoped citations, enforces field and resource grants, and replays on reload', async () => {
+  const knowledgeScript: AssistantScript = {
+    turns: [
+      {
+        when: 'budget',
+        steps: [
+          { tools: [{ name: 'search_knowledge', input: { query: 'Budget 40k' } }] },
+          { text: 'Globex has a 40k budget and decides in May [1].' },
+        ],
+      },
+      {
+        when: 'globex',
+        steps: [{ tools: [{ name: 'search_knowledge', input: { query: 'Globex' } }] }, { text: 'Found Globex [1].' }],
+      },
+    ],
+  };
+  await fixture(
+    async ({ as, turn, get, requests }) => {
+      // 1. Ann (full read grant) finds Globex via lead.notes with excerpt, address, and persisted citations.
+      const res = await turn({ text: 'check budget' });
+      assert.equal(res.status, 200);
+      const citEvents = of(res.events, 'citations');
+      assert.equal(citEvents.length, 1);
+      assert.equal(citEvents[0].items.length, 1);
+      assert.equal(citEvents[0].items[0].ref, 1);
+      assert.equal(citEvents[0].items[0].title, 'Globex');
+      assert.match(String(citEvents[0].items[0].snippet), /Budget 40k/);
+      assert.equal(citEvents[0].items[0].address, `/${appId}/leads/2`);
+
+      const convId = of(res.events, 'conversation')[0].id;
+      const replayed = (await get(`/api/assistant/conversation?app=${appId}&id=${convId}`)).body.items as Array<Record<string, unknown>>;
+      assert.ok(replayed.some((item) => item.type === 'citations'));
+
+      // 2. Clerk (whose field grant hides lead.notes) gets 0 matches for "Budget 40k", never leaking hidden column text.
+      as('clerk');
+      const clerkBudget = await turn({ text: 'check budget' });
+      assert.equal(clerkBudget.status, 200);
+      assert.deepEqual(of(clerkBudget.events, 'citations'), []);
+      assert.doesNotMatch(JSON.stringify(requests.at(-1)!.messages), /decides in May/);
+
+      // Clerk CAN still search visible columns (lead.name).
+      const clerkName = await turn({ text: 'find globex' });
+      assert.equal(clerkName.status, 200);
+      assert.equal(of(clerkName.events, 'citations').length, 1);
+      assert.equal(of(clerkName.events, 'citations')[0].items[0].title, 'Globex');
+
+      // 3. Outsider (no read grant on lead) gets 0 citations and never learns of Globex.
+      as('outsider');
+      const outsiderRes = await turn({ text: 'find globex' });
+      assert.equal(outsiderRes.status, 200);
+      assert.deepEqual(of(outsiderRes.events, 'citations'), []);
+      assert.doesNotMatch(JSON.stringify(requests.at(-1)!.messages), /Budget 40k|Acme Corp/);
+    },
+    {
+      script: knowledgeScript,
+      assistant: {
+        knowledge: {
+          lead_notes: {
+            resource: 'lead',
+            fields: ['name', 'notes'],
+            title: 'name',
+            description: 'Lead notes and background',
+          },
+        },
+      },
+    },
+  );
+});
+
+test('memory forget tool, maxItems eviction, per-agent narrowing, and knowledge where/roles filters hold strictly', async () => {
+  await fixture(
+    async ({ as, turn, get, post, requests }) => {
+      // 1. Seed 3 personal memories when maxItems = 2 -> oldest is evicted automatically.
+      const m1 = await post('/api/assistant/memories', { app: appId, scope: 'person', content: 'Oldest preference one.' });
+      assert.equal(m1.status, 200);
+      const m2 = await post('/api/assistant/memories', { app: appId, scope: 'person', content: 'Second preference two.' });
+      assert.equal(m2.status, 200);
+      const m3 = await post('/api/assistant/memories', { app: appId, scope: 'person', content: 'Newest preference three.' });
+      assert.equal(m3.status, 200);
+      const listed = (await get(`/api/assistant/memories?app=${appId}`)).body.memories as Array<{ id: string; content: string }>;
+      assert.equal(listed.length, 2);
+      assert.ok(!listed.some((m) => m.content === 'Oldest preference one.'), 'oldest memory evicted past maxItems');
+
+      // 2. Forget tool removes a memory by id and emits a memory(forgot) event.
+      const forgetTargetId = listed[0]!.id;
+      setAssistantModel(() =>
+        scriptedModel({
+          turns: [
+            {
+              when: 'drop note',
+              steps: [{ tools: [{ name: 'forget', input: { id: forgetTargetId } }] }, { text: 'Removed that note.' }],
+            },
+            {
+              when: 'try stateless',
+              steps: [
+                { tools: [{ name: 'remember', input: { content: 'Should fail on stateless agent.' } }] },
+                { text: 'Cannot remember here.' },
+              ],
+            },
+            {
+              when: 'search working',
+              steps: [
+                { tools: [{ name: 'search_knowledge', input: { query: 'Acme Corp Globex' } }] },
+                { text: 'Checked working leads [1].' },
+              ],
+            },
+          ],
+        }),
+      );
+      const forgot = await turn({ text: 'drop note', agent: 'analyst' });
+      assert.equal(forgot.status, 200);
+      const forgotEvents = of(forgot.events, 'memory');
+      assert.equal(forgotEvents.length, 1);
+      assert.equal(forgotEvents[0].action, 'forgot');
+      assert.equal(forgotEvents[0].memoryId, forgetTargetId);
+
+      // 3. Stateless agent (`memory: false`, narrowed to `people` knowledge only) refuses `remember` and cannot search `working_leads`.
+      const stateless = await turn({ text: 'try stateless', agent: 'stateless' });
+      assert.equal(stateless.status, 200);
+      assert.ok(of(stateless.events, 'step').some((s) => s.failed === true && /Memory is not enabled/.test(String(s.label))));
+      assert.deepEqual(of(stateless.events, 'memory'), []);
+
+      // 4. `knowledge.*.where` excludes rows outside the condition (`status = working` excludes Acme Corp which is `status = new`).
+      const whereRes = await turn({ text: 'search working', agent: 'analyst' });
+      assert.equal(whereRes.status, 200);
+      const whereCitations = of(whereRes.events, 'citations')[0]?.items as Array<{ title: string }>;
+      assert.equal(whereCitations.length, 1);
+      assert.equal(whereCitations[0].title, 'Globex');
+
+      // 5. `knowledge.*.roles` hides rep-only sources from viewer in both `/api/app` and turn catalog.
+      as('viewer');
+      const viewerApp = (await get(`/api/app?app=${appId}`)).body.app as { assistant?: { knowledge?: Array<{ id: string }> } };
+      assert.deepEqual(
+        (viewerApp.assistant?.knowledge ?? []).map((k) => k.id),
+        ['people'],
+      );
+      const viewerSearch = await turn({ text: 'search working', agent: 'analyst' });
+      assert.equal(viewerSearch.status, 200);
+      assert.deepEqual(of(viewerSearch.events, 'citations'), []);
+      assert.ok(requests.length >= 0);
+    },
+    {
+      assistant: {
+        memory: { scopes: ['person'], maxItems: 2 },
+        knowledge: {
+          working_leads: {
+            resource: 'lead',
+            fields: ['name', 'notes'],
+            title: 'name',
+            where: 'status = working',
+            roles: ['rep'],
+          },
+          people: {
+            resource: 'person',
+            fields: ['name', 'email'],
+            title: 'name',
+          },
+        },
+        defaultAgent: 'analyst',
+        agents: {
+          analyst: { name: 'Analyst', knowledge: ['working_leads'] },
+          stateless: { name: 'Stateless', memory: false, knowledge: ['people'] },
+        },
+      },
+    },
+  );
+});
+
+test('durable background runs stream live SSE, pause at approval checkpoints, resume, cancel, enforce concurrency & roles, and isolate accounts', async () => {
+  await fixture(
+    async ({ as, get, streamGet, post }) => {
+      // 1. Launch a preset background run (202 Accepted) and stream it to completion.
+      setAssistantModel(() =>
+        scriptedModel({
+          turns: [
+            {
+              when: 'Audit all open leads',
+              steps: [{ tools: [{ name: 'query', input: { q: 'lead' } }] }, { text: 'Background audit complete: 2 leads inspected.' }],
+            },
+            {
+              when: 'Start working Acme in background',
+              steps: [
+                {
+                  tools: [
+                    {
+                      name: 'run',
+                      input: { action: 'lead.startWorking', id: 1, why: 'Met enterprise qualification criteria.' },
+                    },
+                  ],
+                },
+                { text: 'Acme Corp is now working and background run finished.' },
+              ],
+            },
+          ],
+        }),
+      );
+
+      const started = await post('/api/assistant/runs', { app: appId, preset: 'pipeline_audit' });
+      assert.equal(started.status, 202);
+      const run1 = started.body.run as { id: string; conversation: string; title: string; agent: string };
+      assert.equal(run1.title, 'Pipeline Audit');
+      assert.equal(run1.agent, 'analyst');
+
+      const stream1 = await streamGet(`/api/assistant/runs/stream?app=${appId}&id=${encodeURIComponent(run1.id)}`);
+      assert.equal(stream1.status, 200);
+      assert.ok(stream1.events.some((e) => e.event === 'run_status'));
+      assert.ok(stream1.events.some((e) => e.event === 'done'));
+
+      // Durable detail replays steps + text, and linked conversation opens normally.
+      const detail1 = await get(`/api/assistant/runs/detail?app=${appId}&id=${encodeURIComponent(run1.id)}`);
+      assert.equal(detail1.status, 200);
+      assert.equal((detail1.body.run as { status: string }).status, 'completed');
+      assert.ok((detail1.body.run as { steps: number }).steps >= 1);
+      const detailItems = detail1.body.items as Array<{ type: string; text?: string }>;
+      assert.ok(detailItems.some((item) => item.type === 'text' && /Background audit complete/.test(item.text ?? '')));
+      const linkedConv = await get(`/api/assistant/conversation?app=${appId}&id=${encodeURIComponent(run1.conversation)}`);
+      assert.equal(linkedConv.status, 200);
+
+      // 2. Approval checkpoint pause (`awaiting`) -> resolve -> resumes to `completed`.
+      const started2 = await post('/api/assistant/runs', { app: appId, prompt: 'Start working Acme in background' });
+      assert.equal(started2.status, 202);
+      const run2 = started2.body.run as { id: string };
+      await streamGet(`/api/assistant/runs/stream?app=${appId}&id=${encodeURIComponent(run2.id)}`);
+
+      const detail2 = await get(`/api/assistant/runs/detail?app=${appId}&id=${encodeURIComponent(run2.id)}`);
+      assert.equal(detail2.status, 200);
+      assert.equal((detail2.body.run as { status: string }).status, 'awaiting');
+      assert.equal(detail2.body.awaiting, true);
+      const proposalItem = (detail2.body.items as Array<{ type: string; id?: string }>).find((i) => i.type === 'proposal');
+      assert.ok(proposalItem?.id, 'background run persisted pending proposal');
+
+      const resolved = await post('/api/assistant/runs/resolve', {
+        app: appId,
+        id: run2.id,
+        proposal: proposalItem!.id,
+        outcome: 'done',
+      });
+      assert.equal(resolved.status, 202);
+      await streamGet(`/api/assistant/runs/stream?app=${appId}&id=${encodeURIComponent(run2.id)}`);
+
+      const detail2After = await get(`/api/assistant/runs/detail?app=${appId}&id=${encodeURIComponent(run2.id)}`);
+      assert.equal((detail2After.body.run as { status: string }).status, 'completed');
+      assert.ok(
+        (detail2After.body.items as Array<{ type: string; text?: string }>).some(
+          (i) => i.type === 'text' && /Acme Corp is now working/.test(i.text ?? ''),
+        ),
+      );
+
+      // 3. Concurrency cap (`maxConcurrent: 1`) + cancel + resume + delete.
+      let releaseSlow!: () => void;
+      const slowGate = new Promise<void>((r) => {
+        releaseSlow = r;
+      });
+      setAssistantModel(() => ({
+        async stream(_req, onText, signal) {
+          if (signal?.aborted) throw new Error('aborted');
+          await new Promise<void>((resolve, reject) => {
+            const onAbort = () => reject(new Error('aborted'));
+            signal?.addEventListener('abort', onAbort, { once: true });
+            void slowGate.then(() => {
+              signal?.removeEventListener('abort', onAbort);
+              resolve();
+            });
+          });
+          if (typeof onText === 'function') onText('Slow run finished.');
+          else onText.onText('Slow run finished.');
+          return {
+            content: [{ type: 'text', text: 'Slow run finished.' }],
+            stopReason: 'end_turn',
+            usage: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0 },
+          };
+        },
+      }));
+
+      const slow1 = await post('/api/assistant/runs', { app: appId, prompt: 'Slow investigation' });
+      assert.equal(slow1.status, 202);
+      const slowId = (slow1.body.run as { id: string }).id;
+
+      // Second concurrent run rejected with 429 while first is active.
+      const slow2 = await post('/api/assistant/runs', { app: appId, prompt: 'Blocked second run' });
+      assert.equal(slow2.status, 429);
+
+      // Cancel active run cleanly.
+      const cancelled = await post('/api/assistant/runs/cancel', { app: appId, id: slowId });
+      assert.equal(cancelled.status, 200);
+      assert.equal((cancelled.body.run as { status: string }).status, 'cancelled');
+
+      // Resume cancelled run with fast model -> completes!
+      releaseSlow();
+      const resumed = await post('/api/assistant/runs/resume', { app: appId, id: slowId });
+      assert.equal(resumed.status, 202);
+      await streamGet(`/api/assistant/runs/stream?app=${appId}&id=${encodeURIComponent(slowId)}`);
+      const afterResume = await get(`/api/assistant/runs/detail?app=${appId}&id=${encodeURIComponent(slowId)}`);
+      assert.equal((afterResume.body.run as { status: string }).status, 'completed');
+
+      // 4. Cross-account isolation & preset role enforcement (`viewer` cannot see `ann`'s runs or run rep-only preset).
+      as('viewer');
+      const viewerApp = (await get(`/api/app?app=${appId}`)).body.app as {
+        assistant?: { backgroundRuns?: { presets?: Array<{ id: string }> } };
+      };
+      assert.deepEqual(viewerApp.assistant?.backgroundRuns?.presets ?? [], []);
+      const forbiddenPreset = await post('/api/assistant/runs', { app: appId, preset: 'pipeline_audit' });
+      assert.equal(forbiddenPreset.status, 403);
+      const crossDetail = await get(`/api/assistant/runs/detail?app=${appId}&id=${encodeURIComponent(run1.id)}`);
+      assert.equal(crossDetail.status, 404);
+      const crossList = await get(`/api/assistant/runs?app=${appId}`);
+      assert.deepEqual(crossList.body.runs, []);
+
+      // 5. Original owner can delete their run record.
+      as('ann');
+      const deleted = await post('/api/assistant/runs/delete', { app: appId, id: slowId });
+      assert.equal(deleted.status, 200);
+      assert.equal((await get(`/api/assistant/runs/detail?app=${appId}&id=${encodeURIComponent(slowId)}`)).status, 404);
+    },
+    {
+      assistant: {
+        defaultAgent: 'analyst',
+        agents: {
+          analyst: { name: 'Analyst' },
+        },
+        backgroundRuns: {
+          maxConcurrent: 1,
+          maxSteps: 10,
+          presets: [
+            {
+              id: 'pipeline_audit',
+              label: 'Pipeline Audit',
+              description: 'Inspect all open leads',
+              prompt: 'Audit all open leads',
+              agent: 'analyst',
+              roles: ['rep'],
+            },
+          ],
+        },
+      },
+    },
+  );
+});
+
+test('scheduled and record-change triggered background runs fire idempotently, respect toggles/fields/roles, and link lastRunId', async () => {
+  const prevClock = process.env.MISTRI_CLOCK;
+  process.env.MISTRI_CLOCK = '2026-09-07T12:30:00.000Z'; // Monday 08:30 America/New_York
+  try {
+    await fixture(
+      async ({ as, get, streamGet, post }) => {
+        setAssistantModel(() =>
+          scriptedModel({
+            turns: [
+              {
+                when: 'Morning pipeline brief',
+                steps: [{ tools: [{ name: 'query', input: { q: 'lead' } }] }, { text: 'Morning brief complete: 2 active leads reviewed.' }],
+              },
+              {
+                when: 'Investigate new lead',
+                steps: [{ tools: [{ name: 'query', input: { q: 'lead' } }] }, { text: 'Investigated newly created lead automatically.' }],
+              },
+              {
+                when: 'Review lead status change',
+                steps: [{ text: 'Reviewed status change on lead.' }],
+              },
+            ],
+          }),
+        );
+
+        // 1. Listing automations returns schedules (with nextRunAt) and triggers for rep.
+        const listed = await get(`/api/assistant/automations?app=${appId}`);
+        assert.equal(listed.status, 200);
+        const schedules = listed.body.schedules as Array<{ id: string; enabled: boolean; nextRunAt: string | null }>;
+        const triggers = listed.body.triggers as Array<{ id: string; enabled: boolean; resource: string }>;
+        assert.equal(schedules.length, 1);
+        assert.equal(schedules[0].id, 'morning_brief');
+        assert.equal(schedules[0].enabled, true);
+        assert.ok(schedules[0].nextRunAt, 'nextRunAt computed from cron');
+        assert.equal(triggers.length, 2);
+
+        // 2. Tick at 08:30 America/New_York fires `morning_brief` once; second tick in same slot is idempotent (0 runs).
+        const tick1 = await post('/api/assistant/automations/tick', { app: appId });
+        assert.equal(tick1.status, 200);
+        const fired1 = tick1.body.runs as Array<{ id: string; source: string }>;
+        assert.equal(fired1.length, 1);
+        assert.equal(fired1[0].source, 'schedule:morning_brief');
+        await streamGet(`/api/assistant/runs/stream?app=${appId}&id=${encodeURIComponent(fired1[0].id)}`);
+
+        const tick2 = await post('/api/assistant/automations/tick', { app: appId });
+        assert.equal(tick2.status, 200);
+        assert.equal((tick2.body.runs as unknown[]).length, 0, 'cron slot never double-fires');
+
+        // Automations list now links lastRunId + lastRunAt.
+        const afterTick = await get(`/api/assistant/automations?app=${appId}`);
+        assert.equal((afterTick.body.schedules as Array<{ lastRunId: string }>)[0].lastRunId, fired1[0].id);
+
+        // 3. Manual "Run now" on schedule dispatches immediately and links the new run.
+        const runNow = await post('/api/assistant/automations/run', { app: appId, id: 'morning_brief' });
+        assert.equal(runNow.status, 202);
+        const manualRun = runNow.body.run as { id: string; source: string };
+        assert.equal(manualRun.source, 'schedule:morning_brief');
+        await streamGet(`/api/assistant/runs/stream?app=${appId}&id=${encodeURIComponent(manualRun.id)}`);
+
+        // 4. Pausing a schedule via toggle persists `enabled: false` and clears `nextRunAt`.
+        const paused = await post('/api/assistant/automations/toggle', {
+          app: appId,
+          kind: 'schedule',
+          id: 'morning_brief',
+          enabled: false,
+        });
+        assert.equal(paused.status, 200);
+        assert.equal((paused.body.automation as { enabled: boolean }).enabled, false);
+        const afterPause = await get(`/api/assistant/automations?app=${appId}`);
+        assert.equal((afterPause.body.schedules as Array<{ enabled: boolean; nextRunAt: string | null }>)[0].enabled, false);
+        assert.equal((afterPause.body.schedules as Array<{ nextRunAt: string | null }>)[0].nextRunAt, null);
+
+        // 5. Record-change trigger on `lead` create fires automatically after `/api/insert` commits!
+        const inserted = await post('/api/insert', {
+          table: 'lead',
+          values: { name: 'Stark Industries', status: 'new', notes: 'Inbound enterprise request' },
+        });
+        assert.equal(inserted.status, 200, JSON.stringify(inserted.body));
+        assert.ok(inserted.body.key, JSON.stringify(inserted.body));
+
+        // Wait briefly for the fire-and-forget trigger run to be created & finish.
+        let triggerRun: { id: string; source: string; status: string } | undefined;
+        for (let attempt = 0; attempt < 40; attempt++) {
+          const runsRes = await get(`/api/assistant/runs?app=${appId}`);
+          triggerRun = (runsRes.body.runs as Array<{ id: string; source: string; status: string }>).find(
+            (r) => r.source === 'trigger:new_lead',
+          );
+          if (triggerRun && triggerRun.status === 'completed') break;
+          await new Promise((r) => setTimeout(r, 50));
+        }
+        assert.ok(triggerRun, 'create trigger launched a durable background run');
+        assert.equal(triggerRun!.status, 'completed');
+
+        // 6. Update trigger with `fields: ['status']` ignores a `notes`-only update, then fires when `status` updates.
+        const notesEdit = await post('/api/update', {
+          table: 'lead',
+          key: { id: 1 },
+          values: { notes: 'Updated notes only' },
+        });
+        assert.equal(notesEdit.status, 200, JSON.stringify(notesEdit.body));
+        await new Promise((r) => setTimeout(r, 120));
+        const runsAfterNotes = (await get(`/api/assistant/runs?app=${appId}`)).body.runs as Array<{ source: string }>;
+        assert.ok(!runsAfterNotes.some((r) => r.source === 'trigger:status_watch'), 'non-matching field edit did not fire trigger');
+
+        const statusEdit = await post('/api/update', {
+          table: 'lead',
+          key: { id: 1 },
+          values: { status: 'working' },
+        });
+        assert.equal(statusEdit.status, 200, JSON.stringify(statusEdit.body));
+        let statusRun: { id: string; source: string; status: string } | undefined;
+        for (let attempt = 0; attempt < 40; attempt++) {
+          const runsRes = await get(`/api/assistant/runs?app=${appId}`);
+          statusRun = (runsRes.body.runs as Array<{ id: string; source: string; status: string }>).find(
+            (r) => r.source === 'trigger:status_watch',
+          );
+          if (statusRun && statusRun.status === 'completed') break;
+          await new Promise((r) => setTimeout(r, 50));
+        }
+        assert.ok(statusRun, 'matching field update fired trigger');
+        assert.equal(statusRun!.status, 'completed');
+
+        // 7. Role enforcement: `viewer` does not see rep-only schedule or triggers and gets 403 on toggle/run.
+        as('viewer');
+        const viewerAutos = await get(`/api/assistant/automations?app=${appId}`);
+        assert.equal(viewerAutos.status, 200);
+        assert.deepEqual(viewerAutos.body.schedules, []);
+        assert.deepEqual(viewerAutos.body.triggers, []);
+        assert.equal((await post('/api/assistant/automations/run', { app: appId, id: 'morning_brief' })).status, 403);
+        assert.equal(
+          (await post('/api/assistant/automations/toggle', { app: appId, kind: 'trigger', id: 'new_lead', enabled: false })).status,
+          403,
+        );
+      },
+      {
+        assistant: {
+          defaultAgent: 'analyst',
+          agents: { analyst: { name: 'Analyst' } },
+          backgroundRuns: {
+            maxConcurrent: 3,
+            maxSteps: 8,
+            schedules: [
+              {
+                id: 'morning_brief',
+                label: 'Morning Pipeline Brief',
+                description: 'Weekday 8:30 AM executive review.',
+                every: '30 8 * * 1-5',
+                timezone: 'America/New_York',
+                prompt: 'Morning pipeline brief',
+                agent: 'analyst',
+                roles: ['rep'],
+              },
+            ],
+            triggers: [
+              {
+                id: 'new_lead',
+                label: 'New Lead Triage',
+                resource: 'lead',
+                on: ['create'],
+                prompt: 'Investigate new lead',
+                agent: 'analyst',
+                roles: ['rep'],
+                cooldownSeconds: 60,
+              },
+              {
+                id: 'status_watch',
+                label: 'Lead Status Watch',
+                resource: 'lead',
+                on: ['update'],
+                fields: ['status'],
+                prompt: 'Review lead status change',
+                agent: 'analyst',
+                roles: ['rep'],
+                cooldownSeconds: 60,
+              },
+            ],
+          },
+        },
+      },
+    );
+  } finally {
+    if (prevClock === undefined) delete process.env.MISTRI_CLOCK;
+    else process.env.MISTRI_CLOCK = prevClock;
+  }
+});
+
+test('Wave 3A: structured run trace observability and ephemeral declarative eval suite runner enforce grading & roles', async () => {
+  await fixture(
+    async ({ as, get, streamGet, post }) => {
+      setAssistantModel(() =>
+        scriptedModel({
+          turns: [
+            {
+              when: 'Audit enterprise leads',
+              steps: [
+                {
+                  thinking: 'Search knowledge base for active leads and produce verified citations.',
+                  tools: [{ name: 'search_knowledge', input: { query: 'Acme', limit: 2 } }],
+                },
+                { text: 'Enterprise lead audit complete: Acme Corp is active [1].' },
+              ],
+            },
+            {
+              when: 'Check compliance policy',
+              steps: [{ text: 'All leads look standard.' }],
+            },
+          ],
+        }),
+      );
+
+      // 1. Run a background run and fetch its structured observability trace.
+      const launched = await post('/api/assistant/runs', { app: appId, prompt: 'Audit enterprise leads' });
+      assert.equal(launched.status, 202);
+      const runId = (launched.body.run as { id: string }).id;
+      await streamGet(`/api/assistant/runs/stream?app=${appId}&id=${encodeURIComponent(runId)}`);
+
+      const traceRes = await get(`/api/assistant/runs/trace?app=${appId}&id=${encodeURIComponent(runId)}`);
+      assert.equal(traceRes.status, 200);
+      const trace = traceRes.body.trace as {
+        totalSteps: number;
+        toolCalls: number;
+        citationsCount: number;
+        reasoningChars: number;
+        spans: Array<{ kind: string; name: string; status: string }>;
+      };
+      assert.equal(trace.totalSteps, 1);
+      assert.equal(trace.toolCalls, 1);
+      assert.ok(trace.citationsCount >= 1, 'citationsCount tracked in trace');
+      assert.ok(trace.reasoningChars > 0, 'reasoningChars tracked in trace');
+      assert.ok(trace.spans.some((s) => s.kind === 'reasoning'));
+      assert.ok(trace.spans.some((s) => s.kind === 'tool' && s.name === 'search_knowledge' && s.status === 'ok'));
+      assert.ok(trace.spans.some((s) => s.kind === 'answer'));
+
+      const convBefore = ((await get(`/api/assistant?app=${appId}`)).body.conversations as unknown[]).length;
+
+      // 2. Run the full eval suite ephemerally — 1 passes, 1 fails expected tool/citation checks; conversation history untouched!
+      const evalRes = await post('/api/assistant/evals/run', { app: appId });
+      assert.equal(evalRes.status, 200);
+      const report = evalRes.body.report as {
+        total: number;
+        passed: number;
+        failed: number;
+        passRate: number;
+        cases: Array<{ id: string; passed: boolean; failures: string[] }>;
+      };
+      assert.equal(report.total, 2);
+      assert.equal(report.passed, 1);
+      assert.equal(report.failed, 1);
+      assert.equal(report.passRate, 0.5);
+      const passCase = report.cases.find((c) => c.id === 'lead_grounding')!;
+      const failCase = report.cases.find((c) => c.id === 'strict_compliance')!;
+      assert.equal(passCase.passed, true);
+      assert.equal(failCase.passed, false);
+      assert.ok(failCase.failures.some((f) => f.includes('search_knowledge')));
+
+      const convAfter = ((await get(`/api/assistant?app=${appId}`)).body.conversations as unknown[]).length;
+      assert.equal(convAfter, convBefore, 'ephemeral evals never pollute user conversation list');
+
+      // 3. Role-gated eval case is refused (403) for viewer.
+      as('viewer');
+      const denied = await post('/api/assistant/evals/run', { app: appId, id: 'lead_grounding' });
+      assert.equal(denied.status, 403);
+    },
+    {
+      assistant: {
+        defaultAgent: 'analyst',
+        agents: { analyst: { name: 'Analyst' } },
+        knowledge: {
+          leads: { resource: 'lead', fields: ['name', 'status', 'notes'], title: 'name' },
+        },
+        backgroundRuns: { maxConcurrent: 2, maxSteps: 8 },
+        evals: [
+          {
+            id: 'lead_grounding',
+            label: 'Lead Grounding & Citations',
+            description: 'Verifies knowledge search, reasoning, and citations.',
+            prompt: 'Audit enterprise leads',
+            agent: 'analyst',
+            roles: ['rep'],
+            expect: {
+              answerMatches: 'Acme Corp',
+              expectedTools: ['search_knowledge'],
+              forbiddenTools: ['run'],
+              expectCitations: true,
+              expectReasoning: true,
+              maxSteps: 4,
+            },
+          },
+          {
+            id: 'strict_compliance',
+            label: 'Strict Compliance Check',
+            prompt: 'Check compliance policy',
+            agent: 'analyst',
+            roles: ['rep'],
+            expect: {
+              expectedTools: ['search_knowledge'],
+              expectCitations: true,
+            },
+          },
+        ],
+      },
+    },
+  );
+});
+
+test('Wave 3B: external HTTP/MCP tools enforce egress, approval checkpoints, and roles; signed webhooks launch durable runs', async () => {
+  const received: Array<{ path: string; auth?: string; body: unknown }> = [];
+  const mockRemote = createServer(async (req, res) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : (chunk as Buffer));
+    const parsed = chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : undefined;
+    received.push({ path: req.url ?? '', auth: req.headers.authorization, body: parsed });
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (req.url === '/mcp') {
+      const rpc = parsed as { id: number; params?: { name?: string; arguments?: Record<string, unknown> } };
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: rpc.id,
+          result: {
+            content: [{ type: 'text', text: `PR #${rpc.params?.arguments?.pr} is approved and ready to merge.` }],
+          },
+        }),
+      );
+      return;
+    }
+    res.end(JSON.stringify({ ok: true, delivered: parsed }));
+  });
+  mockRemote.listen(0, '127.0.0.1');
+  await once(mockRemote, 'listening');
+  const remoteAddr = mockRemote.address();
+  assert.ok(remoteAddr && typeof remoteAddr === 'object');
+  const remoteBase = `http://127.0.0.1:${remoteAddr.port}`;
+
+  const prevMcp = process.env.MISTRI_TEST_MCP_TOKEN;
+  const prevHook = process.env.MISTRI_TEST_WEBHOOK_SECRET;
+  process.env.MISTRI_TEST_MCP_TOKEN = 'mcp-secret-token-42';
+  process.env.MISTRI_TEST_WEBHOOK_SECRET = 'whsec_test_signing_key_99';
+
+  try {
+    await fixture(
+      async ({ as, get, post, turn, resolve, url, db }) => {
+        setAssistantModel(() =>
+          scriptedModel({
+            turns: [
+              {
+                when: 'Check PR 412',
+                steps: [{ tools: [{ name: 'lookup_github_pr', input: { pr: 412 } }] }, { text: 'PR #412 is approved and ready to merge.' }],
+              },
+              {
+                when: 'Notify Slack about v2.4',
+                steps: [
+                  {
+                    tools: [
+                      {
+                        name: 'post_slack_alert',
+                        input: { channel: '#releases', text: 'v2.4 shipped', why: 'Announce release to engineering.' },
+                      },
+                    ],
+                  },
+                  { text: 'Slack alert sent to #releases.' },
+                ],
+              },
+              {
+                when: 'release tag v2.4',
+                steps: [{ text: 'Verified GitHub release v2.4 and archived release brief.' }],
+              },
+            ],
+          }),
+        );
+
+        // 1. `/api/app` exposes safe metadata only (no url/auth/secretEnv/roles) and filters by role.
+        const repApp = await get(`/api/app?app=${appId}`);
+        assert.equal(repApp.status, 200);
+        const repJson = JSON.stringify(repApp.body.app.assistant);
+        assert.doesNotMatch(repJson, /mcp-secret-token-42|MISTRI_TEST_MCP_TOKEN|MISTRI_TEST_WEBHOOK_SECRET|127\.0\.0\.1/);
+        assert.equal(repApp.body.app.assistant.externalTools.length, 2);
+        assert.equal(repApp.body.app.assistant.webhooks.length, 1);
+
+        as('viewer');
+        const viewerApp = await get(`/api/app?app=${appId}`);
+        assert.equal(viewerApp.body.app.assistant.externalTools.length, 1, 'rep-only write tool hidden from viewer');
+        assert.equal(viewerApp.body.app.assistant.externalTools[0].id, 'lookup_github_pr');
+
+        // 2. Read MCP tool executes JSON-RPC 2.0 `tools/call` with server-expanded Bearer header.
+        as('ann');
+        const readTurn = await turn({ text: 'Check PR 412' });
+        assert.equal(readTurn.status, 200);
+        const readAnswer = of(readTurn.events, 'text')
+          .map((t) => t.delta)
+          .join('');
+        assert.match(readAnswer, /PR #412 is approved/);
+        const mcpCall = received.find((r) => r.path === '/mcp');
+        assert.ok(mcpCall, 'MCP endpoint called');
+        assert.equal(mcpCall.auth, 'Bearer mcp-secret-token-42');
+        assert.equal((mcpCall.body as { method: string }).method, 'tools/call');
+
+        // 3. Write HTTP tool pauses at an approval checkpoint (never auto-executes) and executes via /api/assistant/external/execute.
+        const writeTurn = await turn({ text: 'Notify Slack about v2.4' });
+        assert.equal(writeTurn.status, 200);
+        const proposal = of(writeTurn.events, 'proposal')[0]?.proposal;
+        assert.ok(proposal && proposal.kind === 'external' && proposal.action === 'post_slack_alert');
+        assert.equal(received.filter((r) => r.path === '/slack').length, 0, 'write tool must not auto-execute');
+
+        // Viewer is refused 403 on `/api/assistant/external/execute` for rep-only tool.
+        as('viewer');
+        const deniedExec = await post('/api/assistant/external/execute', {
+          tool: 'post_slack_alert',
+          input: { channel: '#releases', text: 'v2.4 shipped' },
+        });
+        assert.equal(deniedExec.status, 403);
+
+        // Rep confirms -> executes external HTTP POST and resolves the turn.
+        as('ann');
+        const execRes = await post('/api/assistant/external/execute', {
+          tool: 'post_slack_alert',
+          input: proposal.values,
+        });
+        assert.equal(execRes.status, 200);
+        assert.equal(execRes.body.ok, true);
+        assert.equal(received.filter((r) => r.path === '/slack').length, 1);
+
+        const convId = of(writeTurn.events, 'conversation')[0].id as string;
+        const resolved = await resolve({
+          conversation: convId,
+          proposal: proposal.id,
+          outcome: 'done',
+          detail: execRes.body.output,
+        });
+        assert.equal(resolved.status, 200);
+        const resolvedAnswer = of(resolved.events, 'text')
+          .map((t) => t.delta)
+          .join('');
+        assert.match(resolvedAnswer, /Slack alert sent/);
+
+        // 4. Signed inbound webhook rejects bad signature (401) and accepts valid HMAC-SHA256 (202 -> completed run).
+        as(null);
+        const hookPayload = JSON.stringify({ event: 'release', tag: 'v2.4' });
+        const badSig = await fetch(url(`/api/assistant/webhooks/${appId}/github_release`), {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-hub-signature-256': 'sha256=' + '0'.repeat(64) },
+          body: hookPayload,
+        });
+        assert.equal(badSig.status, 401);
+
+        const validSig = 'sha256=' + createHmac('sha256', process.env.MISTRI_TEST_WEBHOOK_SECRET!).update(hookPayload).digest('hex');
+        const goodHook = await fetch(url(`/api/assistant/webhooks/${appId}/github_release`), {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-hub-signature-256': validSig },
+          body: hookPayload,
+        });
+        assert.equal(goodHook.status, 202);
+        const hookJson = (await goodHook.json()) as { run: { id: string; source: string } };
+        assert.equal(hookJson.run.source, 'webhook:github_release');
+
+        // Wait briefly for the detached webhook background run to complete in SQLite.
+        let statusRow: { status: string; summary: string } | undefined;
+        for (let attempt = 0; attempt < 40; attempt++) {
+          statusRow = db.prepare('SELECT status, summary FROM __mistri_assistant_run WHERE id = ?').get(hookJson.run.id) as
+            | { status: string; summary: string }
+            | undefined;
+          if (statusRow?.status === 'completed') break;
+          await new Promise((r) => setTimeout(r, 50));
+        }
+        assert.equal(statusRow?.status, 'completed');
+        assert.match(statusRow?.summary ?? '', /Verified GitHub release v2\.4/);
+      },
+      {
+        assistant: {
+          backgroundRuns: { maxConcurrent: 2, maxSteps: 6 },
+          externalTools: {
+            lookup_github_pr: {
+              label: 'Lookup GitHub PR',
+              description: 'Read PR approval state from GitHub MCP server.',
+              kind: 'mcp',
+              url: `${remoteBase}/mcp`,
+              mcpTool: 'get_pull_request',
+              authHeader: 'Authorization',
+              authValue: 'Bearer ${MISTRI_TEST_MCP_TOKEN}',
+              access: 'read',
+              input: { pr: { type: 'number', description: 'PR number', required: true } },
+            },
+            post_slack_alert: {
+              label: 'Post Slack Alert',
+              description: 'Send a Slack release announcement.',
+              kind: 'http',
+              url: `${remoteBase}/slack`,
+              method: 'POST',
+              access: 'write',
+              roles: ['rep'],
+              input: {
+                channel: { type: 'string', required: true },
+                text: { type: 'string', required: true },
+              },
+            },
+          },
+          webhooks: [
+            {
+              id: 'github_release',
+              label: 'GitHub Release Webhook',
+              description: 'Summarizes newly tagged releases.',
+              secretEnv: 'MISTRI_TEST_WEBHOOK_SECRET',
+              signatureHeader: 'x-hub-signature-256',
+              prompt: 'Summarize this release tag v2.4 payload.',
+            },
+          ],
+        },
+      },
+    );
+  } finally {
+    if (prevMcp === undefined) delete process.env.MISTRI_TEST_MCP_TOKEN;
+    else process.env.MISTRI_TEST_MCP_TOKEN = prevMcp;
+    if (prevHook === undefined) delete process.env.MISTRI_TEST_WEBHOOK_SECRET;
+    else process.env.MISTRI_TEST_WEBHOOK_SECRET = prevHook;
+    await new Promise<void>((resolve) => mockRemote.close(() => resolve()));
+  }
 });

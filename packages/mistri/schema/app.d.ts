@@ -3890,6 +3890,204 @@ export interface AssistantDeclaration {
   readonly defaultAgent?: string;
   /** Author-declared interactive custom blocks the assistant may draw via `show({ kind: 'custom', name, props })`. */
   readonly customBlocks?: Readonly<Record<string, AssistantCustomBlockDeclaration>>;
+  /** Scoped persistent memory (`true` enables per-person memory; or configure `{ scopes, maxItems, sharedRoles }`). */
+  readonly memory?: boolean | AssistantMemoryDeclaration;
+  /** Authority-scoped knowledge sources backed by App resources; searched under the viewer's own grants & row policies with inline citations. */
+  readonly knowledge?: Readonly<Record<string, AssistantKnowledgeDeclaration>>;
+  /** Durable background agent runs (`true` enables ad-hoc background runs; or configure `{ maxConcurrent, maxSteps, presets }`). */
+  readonly backgroundRuns?: boolean | AssistantBackgroundRunsDeclaration;
+  /** Declarative evaluation cases runnable from the Trace & Eval console. */
+  readonly evals?: readonly AssistantEvalCaseDeclaration[];
+  /** Declarative outbound HTTP & MCP tool bridges callable by the assistant (write tools require explicit human approval). */
+  readonly externalTools?: Readonly<Record<string, AssistantExternalToolDeclaration>>;
+  /** Declarative signed inbound webhooks that launch durable background runs (`POST /api/assistant/webhooks/:app/:id`). */
+  readonly webhooks?: readonly AssistantWebhookDeclaration[];
+}
+/** Parameter schema entry for a declarative external tool. */
+export interface AssistantExternalInputFieldDeclaration {
+  readonly type: 'string' | 'number' | 'boolean';
+  readonly description?: string | AppMessageRef;
+  readonly required?: boolean;
+}
+/** A declarative outbound HTTP or MCP (JSON-RPC 2.0) tool callable by an App's assistant. */
+export interface AssistantExternalToolDeclaration {
+  /** Short human-readable label shown on tool steps and approval checkpoints. */
+  readonly label: string | AppMessageRef;
+  /** Concise description shown to the model and in the Automations view. */
+  readonly description: string | AppMessageRef;
+  /** Protocol: `'http'` (JSON request) or `'mcp'` (Streamable HTTP JSON-RPC 2.0 `tools/call`). Default `'http'`. */
+  readonly kind?: 'http' | 'mcp';
+  /** Target endpoint URL (`https://`, or `http://localhost` / `127.0.0.1` for local bridges). Supports `${ENV_VAR}`. */
+  readonly url: string;
+  /** HTTP method for `kind: 'http'` (`'GET'` or `'POST'`, default `'POST'`). */
+  readonly method?: 'GET' | 'POST';
+  /** Remote MCP tool name passed to `tools/call` (required when `kind: 'mcp'`). */
+  readonly mcpTool?: string;
+  /** Optional HTTP header name carrying the server-side credential (never sent to browsers). */
+  readonly authHeader?: string;
+  /** Optional header value template supporting `${ENV_VAR}` expansion strictly on the server. */
+  readonly authValue?: string;
+  /** Access level: `'read'` executes directly; `'write'` (default) pauses at an explicit human approval checkpoint. */
+  readonly access?: 'read' | 'write';
+  /** Roles permitted to invoke this external tool; absent, everyone who may open the assistant. */
+  readonly roles?: readonly string[];
+  /** Optional typed input parameters validated before invoking the external endpoint. */
+  readonly input?: Readonly<Record<string, AssistantExternalInputFieldDeclaration>>;
+}
+/** A declarative signed inbound webhook trigger that dispatches a durable background run. */
+export interface AssistantWebhookDeclaration {
+  /** Stable identifier used in the endpoint path `/api/assistant/webhooks/:app/:id`. */
+  readonly id: string;
+  /** Short label shown in the Run Monitor Automations view. */
+  readonly label: string | AppMessageRef;
+  /** Optional one-line description of what external events this webhook handles. */
+  readonly description?: string | AppMessageRef;
+  /** Uppercase environment variable name holding the shared HMAC-SHA256 signing secret. */
+  readonly secretEnv: string;
+  /** Header carrying the hex or `sha256=<hex>` HMAC signature (default `'x-mistri-signature'`). */
+  readonly signatureHeader?: string;
+  /** Prompt/instructions executed with the verified webhook JSON payload as context. */
+  readonly prompt: string;
+  /** Optional named agent key from `assistant.agents`. */
+  readonly agent?: string;
+  /** Whether enabled by default (default `true`). */
+  readonly enabled?: boolean;
+}
+/** Expectations graded against a declarative assistant evaluation case. */
+export interface AssistantEvalExpectDeclaration {
+  /** Case-insensitive substring expected in the assistant's final answer text. */
+  readonly answerMatches?: string;
+  /** Tool names that must be called at least once during the eval turn. */
+  readonly expectedTools?: readonly string[];
+  /** Tool names that must not succeed during the eval turn. */
+  readonly forbiddenTools?: readonly string[];
+  /** Block kinds or custom block names expected to be emitted. */
+  readonly expectedBlocks?: readonly string[];
+  /** Require at least one verified knowledge citation in the turn. */
+  readonly expectCitations?: boolean;
+  /** Require at least one recorded reasoning trace in the turn. */
+  readonly expectReasoning?: boolean;
+  /** Upper bound on total tokens consumed by the eval turn. */
+  readonly maxTokens?: number;
+  /** Upper bound on tool-calling rounds executed during the eval turn (1–32). */
+  readonly maxSteps?: number;
+}
+/** A declarative evaluation case for an App's assistant. */
+export interface AssistantEvalCaseDeclaration {
+  /** Stable identifier for this eval case (lowercase letters, digits, hyphens, underscores). */
+  readonly id: string;
+  /** Short label shown in the Eval runner tab. */
+  readonly label: string | AppMessageRef;
+  /** Optional one-line description of what this eval case verifies. */
+  readonly description?: string | AppMessageRef;
+  /** Prompt sent to the assistant when this eval case runs. */
+  readonly prompt: string;
+  /** Optional named agent key from `assistant.agents`. */
+  readonly agent?: string;
+  /** Roles permitted to view and run this eval case; absent, everyone who may open the assistant. */
+  readonly roles?: readonly string[];
+  /** Grading expectations evaluated against the resulting trace. */
+  readonly expect: AssistantEvalExpectDeclaration;
+}
+/** Durable background agent run settings for an App's assistant. */
+export interface AssistantBackgroundRunsDeclaration {
+  /** Maximum active concurrent background runs per person (1–5, default 2). */
+  readonly maxConcurrent?: number;
+  /** Maximum tool rounds per background run (1–32, default 16). */
+  readonly maxSteps?: number;
+  /** Optional one-click background run playbooks/presets shown in the Run Monitor. */
+  readonly presets?: readonly AssistantRunPresetDeclaration[];
+  /** Optional cron-scheduled background runs shown in the Run Monitor's Automations view. */
+  readonly schedules?: readonly AssistantRunScheduleDeclaration[];
+  /** Optional record-change event-triggered background runs shown in the Run Monitor's Automations view. */
+  readonly triggers?: readonly AssistantRunTriggerDeclaration[];
+}
+/** A one-click background agent run preset shown in the Run Monitor. */
+export interface AssistantRunPresetDeclaration {
+  /** Stable identifier for this preset (lowercase letters, digits, hyphens, underscores). */
+  readonly id: string;
+  /** Short label shown on the preset button in the Run Monitor. */
+  readonly label: string | AppMessageRef;
+  /** Optional one-line description shown beside the preset. */
+  readonly description?: string | AppMessageRef;
+  /** Prompt/task executed when this preset is launched. */
+  readonly prompt: string;
+  /** Optional named agent key from `assistant.agents` to execute this preset. */
+  readonly agent?: string;
+  /** Roles permitted to launch this preset; absent, everyone who may open the assistant. */
+  readonly roles?: readonly string[];
+}
+/** A declarative cron-scheduled background agent run. */
+export interface AssistantRunScheduleDeclaration {
+  /** Stable identifier for this schedule (lowercase letters, digits, hyphens, underscores). */
+  readonly id: string;
+  /** Short label shown in the Run Monitor Automations view. */
+  readonly label: string | AppMessageRef;
+  /** Optional one-line description explaining what this scheduled run inspects or prepares. */
+  readonly description?: string | AppMessageRef;
+  /** Five cron fields (`minute hour dom month dow`) or `@hourly`, `@daily`, `@weekly`, `@monthly`. */
+  readonly every: string;
+  /** Optional IANA time zone name (defaults to `ui.timezone` or `UTC`). */
+  readonly timezone?: string;
+  /** Prompt/task executed each time this schedule runs. */
+  readonly prompt: string;
+  /** Optional named agent key from `assistant.agents`. */
+  readonly agent?: string;
+  /** Roles offered this schedule; absent, everyone who may open the assistant. */
+  readonly roles?: readonly string[];
+  /** Whether enabled by default before a person pauses it (default `true`). */
+  readonly enabled?: boolean;
+}
+/** A declarative record-change triggered background agent run. */
+export interface AssistantRunTriggerDeclaration {
+  /** Stable identifier for this trigger (lowercase letters, digits, hyphens, underscores). */
+  readonly id: string;
+  /** Short label shown in the Run Monitor Automations view. */
+  readonly label: string | AppMessageRef;
+  /** Optional one-line description explaining what this triggered run inspects or prepares. */
+  readonly description?: string | AppMessageRef;
+  /** Resource/table name in the App whose committed writes fire this trigger. */
+  readonly resource: string;
+  /** Committed write events that fire this trigger (`'create'` and/or `'update'`, default `['create']`). */
+  readonly on?: readonly ('create' | 'update')[];
+  /** Optional column names: on `'update'`, fire only when at least one listed field changed. */
+  readonly fields?: readonly string[];
+  /** Prompt/task executed with the triggering record context. */
+  readonly prompt: string;
+  /** Optional named agent key from `assistant.agents`. */
+  readonly agent?: string;
+  /** Roles for whom this trigger fires; absent, everyone who may open the assistant. */
+  readonly roles?: readonly string[];
+  /** Whether enabled by default before a person pauses it (default `true`). */
+  readonly enabled?: boolean;
+  /** Minimum seconds between automatic fires for the same record (0–86400, default `60`). */
+  readonly cooldownSeconds?: number;
+}
+/** Scoped durable memory configuration for an App's assistant. */
+export interface AssistantMemoryDeclaration {
+  /** Memory scopes enabled: `'person'` (private per signed-in user) and/or `'app'` (shared across the App/tenant). Default `['person']`. */
+  readonly scopes?: readonly ('person' | 'app')[];
+  /** Maximum retained memories per owner/scope (1–200, default 50). */
+  readonly maxItems?: number;
+  /** Roles allowed to write or delete `'app'`-scoped shared memories; absent, everyone who may open the assistant. */
+  readonly sharedRoles?: readonly string[];
+}
+/** An authority-scoped knowledge source backed by an App resource/table, searched with inline record citations. */
+export interface AssistantKnowledgeDeclaration {
+  /** Resource/table name in the App; every search runs through the viewer's own grants, hidden columns, and row policy. */
+  readonly resource: string;
+  /** Text columns searched and excerpted for grounded citations. */
+  readonly fields: readonly string[];
+  /** Optional column holding the document/record title; defaults to the first field or record label. */
+  readonly title?: string;
+  /** Short description shown to the model in its catalog so it knows when to search this source. */
+  readonly description?: string | AppMessageRef;
+  /** Optional static filter expression applied to every search of this source (e.g. `"status = 'published'"`). */
+  readonly where?: string;
+  /** Roles permitted to search this knowledge source; absent, everyone who may open the assistant. */
+  readonly roles?: readonly string[];
+  /** Maximum citations returned per search (1–12, default 6). */
+  readonly limit?: number;
 }
 /** A named agent inside a multi-agent App's assistant: narrows tools, blocks, starters, roles, instructions, and may delegate to sibling `subagents`. */
 export interface AssistantAgentDeclaration {
@@ -3921,6 +4119,10 @@ export interface AssistantAgentDeclaration {
   readonly subagents?: readonly string[];
   /** Narrowing token and step limits for this agent. */
   readonly limits?: { readonly tokensPerTurn?: number; readonly tokensPerPersonPerDay?: number; readonly tokensPerDay?: number; readonly steps?: number };
+  /** `false` disables memory for this agent even when the top-level assistant enables it. */
+  readonly memory?: boolean;
+  /** Subset of `assistant.knowledge` keys this agent may search. */
+  readonly knowledge?: readonly string[];
 }
 /** An author-declared custom assistant block backed by a validated prop schema and optional interactive React component. */
 export interface AssistantCustomBlockDeclaration {

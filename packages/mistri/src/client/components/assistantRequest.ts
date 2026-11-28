@@ -58,3 +58,22 @@ export async function assistantApi(path: string, body?: Record<string, unknown>)
   if (!res.ok) throw Object.assign(new Error(typeof value?.error === 'string' ? value.error : `${res.status}`), { status: res.status });
   return value;
 }
+
+/** Execute a confirmed external HTTP/MCP write proposal via the server bridge and return its normalized outcome. */
+export async function executeExternalProposal(
+  app: string | undefined,
+  tool: string,
+  input: Record<string, unknown>,
+): Promise<{ status: 'done' | 'failed'; detail?: string }> {
+  try {
+    const res = (await assistantApi('/api/assistant/external/execute', { app, tool, input })) as {
+      ok: boolean;
+      status: number;
+      output: string;
+    };
+    if (!res.ok) return { status: 'failed', detail: res.output || `HTTP ${res.status}` };
+    return { status: 'done', ...(res.output ? { detail: res.output.slice(0, 480) } : {}) };
+  } catch (error) {
+    return { status: 'failed', detail: error instanceof Error ? error.message : String(error) };
+  }
+}

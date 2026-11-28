@@ -15,7 +15,9 @@ import { layoutRefusal, sqliteLayoutVersion } from '@mistriwork/engine/adapters/
 import {
   ASSISTANT_INDEX,
   ASSISTANT_LIMITS,
+  ASSISTANT_MEMORY_INDEX,
   ASSISTANT_PREFIX,
+  ASSISTANT_RUN_INDEX,
   ASSISTANT_STORE_VERSION,
   ASSISTANT_TABLES,
   AssistantStoreUnavailable,
@@ -26,7 +28,7 @@ import {
 } from './assistantStore.js';
 import { provisionSqliteTenantSwitch, sqliteTenantSwitchReady } from '../switch/sqliteTenantSwitch.js';
 
-const { meta, conversation, event, usage } = ASSISTANT_TABLES;
+const { meta, conversation, event, usage, memory, run, automation } = ASSISTANT_TABLES;
 const bytes = (column: string, limit: number) => `length(CAST(${column} AS BLOB)) <= ${limit}`;
 /** The version row's table, which pins this version: the upgrade (storeLayouts.ts) rebuilds it to pin the next. */
 const ASSISTANT_META_SQLITE = `CREATE TABLE "${meta}" (
@@ -70,8 +72,64 @@ const definitions = new Map<string, string>([
   PRIMARY KEY (app, tenant, account, day)
 )`,
   ],
+  [
+    memory,
+    `CREATE TABLE "${memory}" (
+  id TEXT COLLATE BINARY PRIMARY KEY,
+  app TEXT COLLATE BINARY NOT NULL CHECK (${bytes('app', ASSISTANT_LIMITS.app)}),
+  tenant TEXT COLLATE BINARY NOT NULL CHECK (${bytes('tenant', ASSISTANT_LIMITS.tenant)}),
+  account TEXT COLLATE BINARY NOT NULL CHECK (${bytes('account', ASSISTANT_LIMITS.account)}),
+  scope TEXT NOT NULL CHECK (scope IN ('person', 'app')),
+  agent TEXT COLLATE BINARY NOT NULL CHECK (${bytes('agent', ASSISTANT_LIMITS.memoryAgent)}),
+  content TEXT NOT NULL CHECK (${bytes('content', ASSISTANT_LIMITS.memoryContent)}),
+  source TEXT NOT NULL CHECK (source IN ('assistant', 'person')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+)`,
+  ],
+  [
+    run,
+    `CREATE TABLE "${run}" (
+  id TEXT COLLATE BINARY PRIMARY KEY,
+  app TEXT COLLATE BINARY NOT NULL CHECK (${bytes('app', ASSISTANT_LIMITS.app)}),
+  tenant TEXT COLLATE BINARY NOT NULL CHECK (${bytes('tenant', ASSISTANT_LIMITS.tenant)}),
+  account TEXT COLLATE BINARY NOT NULL CHECK (${bytes('account', ASSISTANT_LIMITS.account)}),
+  conversation TEXT COLLATE BINARY NOT NULL,
+  agent TEXT COLLATE BINARY NOT NULL CHECK (${bytes('agent', ASSISTANT_LIMITS.memoryAgent)}),
+  source TEXT COLLATE BINARY NOT NULL CHECK (${bytes('source', ASSISTANT_LIMITS.runSource)}),
+  title TEXT NOT NULL CHECK (${bytes('title', ASSISTANT_LIMITS.title)}),
+  prompt TEXT NOT NULL CHECK (${bytes('prompt', ASSISTANT_LIMITS.runPrompt)}),
+  status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'awaiting', 'completed', 'failed', 'cancelled')),
+  steps INTEGER NOT NULL,
+  tokens INTEGER NOT NULL,
+  summary TEXT NOT NULL CHECK (${bytes('summary', ASSISTANT_LIMITS.runSummary)}),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  finished_at TEXT NOT NULL
+)`,
+  ],
+  [
+    automation,
+    `CREATE TABLE "${automation}" (
+  app TEXT COLLATE BINARY NOT NULL CHECK (${bytes('app', ASSISTANT_LIMITS.app)}),
+  tenant TEXT COLLATE BINARY NOT NULL CHECK (${bytes('tenant', ASSISTANT_LIMITS.tenant)}),
+  account TEXT COLLATE BINARY NOT NULL CHECK (${bytes('account', ASSISTANT_LIMITS.account)}),
+  kind TEXT NOT NULL CHECK (kind IN ('schedule', 'trigger')),
+  automation_id TEXT COLLATE BINARY NOT NULL CHECK (${bytes('automation_id', ASSISTANT_LIMITS.automationId)}),
+  enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+  last_slot TEXT NOT NULL,
+  last_run_id TEXT COLLATE BINARY NOT NULL,
+  last_run_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (app, tenant, account, kind, automation_id)
+)`,
+  ],
 ]);
-const INDEX = `CREATE INDEX "${ASSISTANT_INDEX}" ON "${conversation}" (app, tenant, account, updated_at)`;
+const INDEXES = new Map<string, string>([
+  [ASSISTANT_INDEX, `CREATE INDEX "${ASSISTANT_INDEX}" ON "${conversation}" (app, tenant, account, updated_at)`],
+  [ASSISTANT_MEMORY_INDEX, `CREATE INDEX "${ASSISTANT_MEMORY_INDEX}" ON "${memory}" (app, tenant, scope, account, updated_at)`],
+  [ASSISTANT_RUN_INDEX, `CREATE INDEX "${ASSISTANT_RUN_INDEX}" ON "${run}" (app, tenant, account, updated_at)`],
+]);
 
 interface CatalogEntry {
   type: string;
@@ -85,8 +143,8 @@ const catalog = (db: DatabaseSync): CatalogEntry[] =>
     WHERE substr(name, 1, ?) = ? COLLATE NOCASE OR substr(tbl_name, 1, ?) = ? COLLATE NOCASE`)
     .all(ASSISTANT_PREFIX.length, ASSISTANT_PREFIX, ASSISTANT_PREFIX.length, ASSISTANT_PREFIX) as unknown as CatalogEntry[];
 
-/** Exactly this version's tables and index, nothing else under the prefix, its version row, and the tenant switch store beside it. */
-function sqliteAssistantReady(db: DatabaseSync): boolean {
+/** Exactly this version's tables and indexes, nothing else under the prefix, its version row, and the tenant switch store beside it. */
+export function sqliteAssistantReady(db: DatabaseSync): boolean {
   if (!sqliteTenantSwitchReady(db)) return false;
   if (
     db
@@ -102,10 +160,8 @@ function sqliteAssistantReady(db: DatabaseSync): boolean {
     tables.length !== definitions.size ||
     tables.some((entry) => definitions.get(entry.name) !== entry.sql) ||
     entries.some((entry) => entry.type !== 'table' && entry.type !== 'index') ||
-    indexes.some(
-      (entry) => !((entry.sql === null && definitions.has(entry.tbl_name)) || (entry.name === ASSISTANT_INDEX && entry.sql === INDEX)),
-    ) ||
-    !indexes.some((entry) => entry.name === ASSISTANT_INDEX)
+    indexes.some((entry) => !((entry.sql === null && definitions.has(entry.tbl_name)) || INDEXES.get(entry.name) === entry.sql)) ||
+    [...INDEXES.keys()].some((name) => !indexes.some((entry) => entry.name === name))
   )
     return false;
   const rows = db.prepare(`SELECT singleton, version FROM main."${meta}"`).all();
@@ -113,6 +169,20 @@ function sqliteAssistantReady(db: DatabaseSync): boolean {
 }
 
 const inMain = (ddl: string) => ddl.replace('CREATE TABLE ', 'CREATE TABLE main.').replace('CREATE INDEX ', 'CREATE INDEX main.');
+
+/** Version 1 to 2: adds the scoped durable memory table, durable background runs table, automation state table, and their owner indexes. */
+export function sqliteAssistantUpgradeFrom1(): readonly string[] {
+  return Object.freeze([
+    inMain(definitions.get(memory)!),
+    inMain(INDEXES.get(ASSISTANT_MEMORY_INDEX)!),
+    inMain(definitions.get(run)!),
+    inMain(INDEXES.get(ASSISTANT_RUN_INDEX)!),
+    inMain(definitions.get(automation)!),
+    `DROP TABLE main."${meta}"`,
+    inMain(ASSISTANT_META_SQLITE),
+    `INSERT INTO main."${meta}" (singleton, version) VALUES (1, ${ASSISTANT_STORE_VERSION})`,
+  ]);
+}
 
 /**
  * Explicit maintenance. Never run when an App opens: a file without the
@@ -129,7 +199,7 @@ export function provisionSqliteAssistant(existingPath: string): { version: typeo
       let provisioned = false;
       if (catalog(db).length === 0) {
         for (const ddl of definitions.values()) db.exec(inMain(ddl));
-        db.exec(inMain(INDEX));
+        for (const ddl of INDEXES.values()) db.exec(inMain(ddl));
         db.prepare(`INSERT INTO main."${meta}" (singleton, version) VALUES (1, ?)`).run(ASSISTANT_STORE_VERSION);
         provisioned = true;
       }

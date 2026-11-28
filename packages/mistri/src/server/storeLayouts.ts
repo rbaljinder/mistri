@@ -419,14 +419,36 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
   },
   {
     id: 'assistant',
-    title: "the assistant's conversations and token counts",
+    title: "the assistant's conversations, durable memories, and token counts",
     tables: { prefix: '__mistri_assistant_' },
-    current: both(1),
+    current: both(2),
     read: marked({ sqlite: { table: '__mistri_assistant_meta' }, postgres: { table: '__mistri_assistant_meta' } }),
-    upgrades: {},
+    upgrades: {
+      sqlite: {
+        1: {
+          says: 'adds the scoped durable memory table and its owner index',
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/assistant/sqliteAssistant.js')).sqliteAssistantUpgradeFrom1()) await db.run(sql);
+          },
+        },
+      },
+      postgres: {
+        1: {
+          says: 'adds the scoped durable memory table and its owner index',
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/assistant/postgresAssistant.js')).postgresAssistantUpgradeFrom1())
+              await db.run(sql);
+          },
+        },
+      },
+    },
     provision: {
       sqlite: async (path) => (await import('../adapters/assistant/sqliteAssistant.js')).provisionSqliteAssistant(path),
       postgres: async (url) => (await import('../adapters/assistant/postgresAssistant.js')).provisionPostgresAssistant(url),
+    },
+    attest: {
+      sqlite: async (db) => (await import('../adapters/assistant/sqliteAssistant.js')).sqliteAssistantReady(db),
+      postgres: async (client) => (await import('../adapters/assistant/postgresAssistant.js')).postgresAssistantReady(client),
     },
   },
   {

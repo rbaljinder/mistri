@@ -12,7 +12,15 @@
  * under the resource, whichever view shows it.
  */
 import { servedShellNew, type ServedShellNew } from './appNewMenu.js';
-import type { AssistantStarter, ServedAssistantAgent } from './appAssistant.js';
+import type {
+  AssistantStarter,
+  ServedAssistantAgent,
+  ServedAssistantBackgroundRuns,
+  ServedAssistantEvalCase,
+  ServedAssistantKnowledge,
+  ServedAssistantMemory,
+} from './appAssistant.js';
+import type { ServedAssistantExternalTool, ServedAssistantWebhook } from './appAssistantExternal.js';
 import type { AppShell } from './appModel.js';
 import { appZone } from './appZone.js';
 import type { AppFormCommandReference } from './command.js';
@@ -183,6 +191,22 @@ export interface AppPayloadApp extends ServedApp<ResolvedListView | AppDashboard
     defaultAgent?: string;
     /** Author-declared custom blocks, mapped to their compiled component id (if any) and default title. */
     customBlocks?: Record<string, { componentId?: string; title?: string }>;
+    /** Scoped persistent memory capability for this viewer (`sharedRoles` stripped in appProjection.ts). */
+    memory?: ServedAssistantMemory & { sharedRoles?: string[] };
+    /** Authority-scoped knowledge sources available to this viewer (`roles` stripped in appProjection.ts). */
+    knowledge?: Array<ServedAssistantKnowledge & { roles?: string[] }>;
+    /** Durable background agent runs capability, presets, schedules, and triggers (`roles` stripped in appProjection.ts). */
+    backgroundRuns?: Omit<ServedAssistantBackgroundRuns, 'presets' | 'schedules' | 'triggers'> & {
+      presets: Array<ServedAssistantBackgroundRuns['presets'][number] & { roles?: string[] }>;
+      schedules?: Array<NonNullable<ServedAssistantBackgroundRuns['schedules']>[number] & { roles?: string[] }>;
+      triggers?: Array<NonNullable<ServedAssistantBackgroundRuns['triggers']>[number] & { roles?: string[] }>;
+    };
+    /** Declarative evaluation cases available to this viewer (`roles` stripped in appProjection.ts). */
+    evals?: Array<ServedAssistantEvalCase & { roles?: string[] }>;
+    /** Viewer-safe outbound HTTP & MCP tool bridges (`url`, credentials, and `roles` stripped). */
+    externalTools?: Array<ServedAssistantExternalTool & { roles?: string[] }>;
+    /** Viewer-safe signed inbound webhook summaries (`secretEnv` stripped). */
+    webhooks?: ServedAssistantWebhook[];
   };
   /** The fields a decision answers, by table id then column (decide/decisionServing.ts): where a record reserves a
       suggestion's place, and the command its Accept runs. Only the tables this reader is served. */
@@ -296,6 +320,12 @@ export function servedApp(app: AppDef, schema: DatabaseSchema, pages: readonly P
             ...servedStarters(app.assistant.starters, views, schema),
             ...servedAgents(app.assistant, views, schema),
             ...servedCustomBlocks(app.assistant.customBlocks),
+            ...servedMemory(app.assistant.memory),
+            ...servedKnowledge(app.assistant.knowledge, schema),
+            ...servedBackgroundRuns(app.assistant.backgroundRuns),
+            ...servedEvals(app.assistant.evals),
+            ...servedExternalTools(app.assistant.externalTools),
+            ...servedWebhooks(app.assistant.webhooks),
           },
         }
       : {}),
@@ -384,6 +414,139 @@ function servedCustomBlocks(customBlocks: NonNullable<AppDef['assistant']>['cust
         },
       ]),
     ),
+  };
+}
+
+function servedMemory(memory: NonNullable<AppDef['assistant']>['memory']): {
+  memory?: ServedAssistantMemory & { sharedRoles?: string[] };
+} {
+  if (!memory) return {};
+  return {
+    memory: {
+      scopes: [...memory.scopes],
+      maxItems: memory.maxItems,
+      ...(memory.sharedRoles ? { sharedRoles: [...memory.sharedRoles] } : {}),
+    },
+  };
+}
+
+function servedKnowledge(
+  knowledge: NonNullable<AppDef['assistant']>['knowledge'],
+  schema: DatabaseSchema,
+): { knowledge?: Array<ServedAssistantKnowledge & { roles?: string[] }> } {
+  if (!knowledge || !Object.keys(knowledge).length) return {};
+  const list = Object.values(knowledge).flatMap((source) => {
+    const table = tableNamed(schema, source.resource);
+    if (!table) return [];
+    return [
+      {
+        id: source.id,
+        resource: table.id,
+        ...(source.description ? { description: source.description } : {}),
+        ...(source.roles ? { roles: [...source.roles] } : {}),
+      },
+    ];
+  });
+  return list.length ? { knowledge: list } : {};
+}
+
+function servedBackgroundRuns(runs: NonNullable<AppDef['assistant']>['backgroundRuns']): {
+  backgroundRuns?: NonNullable<AppPayloadApp['assistant']>['backgroundRuns'];
+} {
+  if (!runs) return {};
+  return {
+    backgroundRuns: {
+      maxConcurrent: runs.maxConcurrent,
+      maxSteps: runs.maxSteps,
+      presets: runs.presets.map((preset) => ({
+        id: preset.id,
+        label: preset.label,
+        ...(preset.description ? { description: preset.description } : {}),
+        prompt: preset.prompt,
+        ...(preset.agent ? { agent: preset.agent } : {}),
+        ...(preset.roles ? { roles: [...preset.roles] } : {}),
+      })),
+      ...(runs.schedules.length
+        ? {
+            schedules: runs.schedules.map((s) => ({
+              id: s.id,
+              label: s.label,
+              ...(s.description ? { description: s.description } : {}),
+              every: s.every,
+              ...(s.timezone ? { timezone: s.timezone } : {}),
+              ...(s.agent ? { agent: s.agent } : {}),
+              enabled: s.enabled,
+              ...(s.roles ? { roles: [...s.roles] } : {}),
+            })),
+          }
+        : {}),
+      ...(runs.triggers.length
+        ? {
+            triggers: runs.triggers.map((t) => ({
+              id: t.id,
+              label: t.label,
+              ...(t.description ? { description: t.description } : {}),
+              resource: t.resource,
+              on: [...t.on],
+              ...(t.fields ? { fields: [...t.fields] } : {}),
+              ...(t.agent ? { agent: t.agent } : {}),
+              enabled: t.enabled,
+              cooldownSeconds: t.cooldownSeconds,
+              ...(t.roles ? { roles: [...t.roles] } : {}),
+            })),
+          }
+        : {}),
+    },
+  };
+}
+
+function servedEvals(evals: NonNullable<AppDef['assistant']>['evals']): {
+  evals?: NonNullable<AppPayloadApp['assistant']>['evals'];
+} {
+  if (!evals?.length) return {};
+  return {
+    evals: evals.map((each) => ({
+      id: each.id,
+      label: each.label,
+      ...(each.description ? { description: each.description } : {}),
+      prompt: each.prompt,
+      ...(each.agent ? { agent: each.agent } : {}),
+      ...(each.roles ? { roles: [...each.roles] } : {}),
+      expect: { ...each.expect },
+    })),
+  };
+}
+
+function servedExternalTools(tools: NonNullable<AppDef['assistant']>['externalTools']): {
+  externalTools?: NonNullable<AppPayloadApp['assistant']>['externalTools'];
+} {
+  if (!tools) return {};
+  const list = Object.values(tools).map((t) => ({
+    id: t.id,
+    label: t.label,
+    description: t.description,
+    kind: t.kind,
+    method: t.method,
+    ...(t.mcpTool ? { mcpTool: t.mcpTool } : {}),
+    access: t.access,
+    ...(t.roles ? { roles: [...t.roles] } : {}),
+  }));
+  return list.length ? { externalTools: list } : {};
+}
+
+function servedWebhooks(webhooks: NonNullable<AppDef['assistant']>['webhooks']): {
+  webhooks?: NonNullable<AppPayloadApp['assistant']>['webhooks'];
+} {
+  if (!webhooks?.length) return {};
+  return {
+    webhooks: webhooks.map((w) => ({
+      id: w.id,
+      label: w.label,
+      ...(w.description ? { description: w.description } : {}),
+      signatureHeader: w.signatureHeader,
+      ...(w.agent ? { agent: w.agent } : {}),
+      enabled: w.enabled,
+    })),
   };
 }
 

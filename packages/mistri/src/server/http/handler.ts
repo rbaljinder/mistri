@@ -102,7 +102,8 @@ import { PAGE_HEADER, pageManifestRefusal } from './pageLoad.js';
 import { APP_DATA } from './appData.js';
 import { getData, postData } from '@mistriwork/engine/server/http/dataRoutes.js';
 import { sessionRoles } from '../../shared/appViewRoles.js';
-import { assistantRoutes } from './assistantRoutes.js';
+import { assistantRoutes, assistantWebhookRoute } from './assistantRoutes.js';
+import { bindAssistantWriteContext, registerAssistantRecordLoopFactory } from '../assistant/assistantAutomations.js';
 import { ensureAppRecordHistory } from '../recordHistory.js';
 import { currentReadRoute, readRouteOf, withReadRoute } from '../readAudit.js';
 import { ensureAppReadAudit } from '../readAuditStore.js';
@@ -228,6 +229,20 @@ async function door(req: IncomingMessage, res: ServerResponse, url: URL, serving
   const appHosts = serving.apps?.map((host) => ({ ...host, app: { ...host.app } }));
   const configPages = (serving.pages ?? []).slice();
 
+  if (
+    path.startsWith('/api/assistant/webhooks/') &&
+    (await assistantWebhookRoute({
+      req,
+      res,
+      path,
+      registry,
+      appHosts,
+      bgLoop: () => webhookLoopback(req, serving, appHosts, configPages),
+    }))
+  ) {
+    return undefined;
+  }
+
   const gated = await gate({ req, res, path, bound, appHosts, commandRequest, commandRefusal, mount });
   /* The gate's decision, on the request's span: allowed or refused, and
      whether anyone was signed in. Never who: that stays local, for the dev
@@ -321,8 +336,14 @@ const OPEN_ROUTES: readonly Route<Admitted>[] = [
     return false;
   },
   /* The assistant's own routes read no rows: what it reads goes back through
-     this dispatcher as this request (the loop), row policy and all. */
-  (ctx) => assistantRoutes(ctx, () => loopback(ctx, ctx.configPages)),
+     this dispatcher as this request (the loop), row policy and all. Background
+     runs use a detached loopback cancelled only by their own AbortSignal. */
+  (ctx) =>
+    assistantRoutes(
+      ctx,
+      () => loopback(ctx, ctx.configPages),
+      () => loopback(ctx, ctx.configPages, undefined, true),
+    ),
   /* The embed's boot, with its first answers (embed/boot.ts): asked through
      the same loop, as this request, so it carries nothing a fetch would not
      be given. What a served page would not carry, it does not either. */
@@ -405,6 +426,7 @@ const ROUTES: readonly Route<RequestContext>[] = [
   /* Everything else that takes a body, on the source the body names (dataRoutes.ts), with the App's hooks. */
   async (ctx) => {
     if (ctx.req.method !== 'POST' || !ctx.path.startsWith('/api/')) return false;
+    bindAssistantWriteContext(ctx);
     await postData(ctx, APP_DATA);
     return true;
   },
@@ -878,12 +900,26 @@ async function shareCardRoute(ctx: GatedContext): Promise<void> {
  * the whole of `handle` — the gate, the row policy, the routes — for the
  * request a fetch from that page would make, answered into memory.
  */
-function loopback(ctx: GatedContext, pages: PageDef[], mark?: WeakSet<IncomingMessage>): Loop {
+function loopback(ctx: GatedContext, pages: PageDef[], mark?: WeakSet<IncomingMessage>, detached = false): Loop {
+  // Snapshot headers and peer socket info upfront so detached background runs stay valid after the 202 response closes.
+  const sourceReq: IncomingMessage = detached
+    ? ({
+        headers: { ...ctx.req.headers },
+        httpVersion: ctx.req.httpVersion,
+        httpVersionMajor: ctx.req.httpVersionMajor,
+        httpVersionMinor: ctx.req.httpVersionMinor,
+        socket: {
+          remoteAddress: ctx.req.socket?.remoteAddress,
+          remotePort: ctx.req.socket?.remotePort,
+          remoteFamily: ctx.req.socket?.remoteFamily,
+        },
+      } as unknown as IncomingMessage)
+    : ctx.req;
   return async (method, target, body, signal) => {
-    if (signal?.aborted || ctx.res.destroyed) return undefined;
+    if (signal?.aborted || (!detached && ctx.res.destroyed)) return undefined;
     const form = /^\/api\/forms\/([a-z0-9][a-z0-9-]{0,63})(?:\?|$)/.exec(target);
     if (method === 'GET' && form && ctx.policy?.publicPlacement?.isPlacedForm(form[1])) return undefined;
-    const request = loopbackRequest(ctx.req, method, target, body);
+    const request = loopbackRequest(sourceReq, method, target, body);
     mark?.add(request);
     inheritTenantHostIntent(ctx.req, request);
     const reply = new CapturedReply();
@@ -893,7 +929,7 @@ function loopback(ctx: GatedContext, pages: PageDef[], mark?: WeakSet<IncomingMe
       reply.destroy();
     };
     signal?.addEventListener('abort', cancel, { once: true });
-    ctx.res.once('close', cancel);
+    if (!detached) ctx.res.once('close', cancel);
     try {
       await handle(request, reply.asResponse(), new URL(target, 'http://localhost'), {
         registry: ctx.registry,
@@ -915,7 +951,7 @@ function loopback(ctx: GatedContext, pages: PageDef[], mark?: WeakSet<IncomingMe
       return undefined;
     } finally {
       signal?.removeEventListener('abort', cancel);
-      ctx.res.off('close', cancel);
+      if (!detached) ctx.res.off('close', cancel);
     }
     if (reply.destroyed || signal?.aborted) return undefined;
     const answer = reply.answer();
@@ -926,6 +962,48 @@ function loopback(ctx: GatedContext, pages: PageDef[], mark?: WeakSet<IncomingMe
       ...(typeof account === 'string' ? { account } : {}),
       carriable: !reply.hasHeader('set-cookie') && !reply.hasHeader('x-mistri-search'),
     };
+  };
+}
+
+registerAssistantRecordLoopFactory((ctx) => loopback(ctx, ctx.configPages, undefined, true));
+
+/** Detached unauthenticated loopback for signed inbound webhooks (carries host only, never session cookies). */
+function webhookLoopback(req: IncomingMessage, serving: Serving, appHosts: AppHost[] | undefined, pages: PageDef[]): Loop {
+  const bound = serving.bound ?? { host: '127.0.0.1', port: 4111 };
+  const sourceReq = {
+    headers: { host: req.headers.host ?? `${bound.host}:${bound.port}` },
+    httpVersion: req.httpVersion,
+    httpVersionMajor: req.httpVersionMajor,
+    httpVersionMinor: req.httpVersionMinor,
+    socket: {
+      remoteAddress: req.socket?.remoteAddress ?? '127.0.0.1',
+      remotePort: req.socket?.remotePort ?? 0,
+      remoteFamily: req.socket?.remoteFamily ?? 'IPv4',
+    },
+  } as unknown as IncomingMessage;
+  return async (method, target, body, signal) => {
+    if (signal?.aborted) return undefined;
+    const request = loopbackRequest(sourceReq, method, target, body);
+    const reply = new CapturedReply();
+    const cancel = () => {
+      request.destroy();
+      reply.destroy();
+    };
+    signal?.addEventListener('abort', cancel, { once: true });
+    try {
+      await handle(request, reply.asResponse(), new URL(target, 'http://localhost'), {
+        ...serving,
+        pages,
+        apps: appHosts,
+      });
+    } catch {
+      return undefined;
+    } finally {
+      signal?.removeEventListener('abort', cancel);
+    }
+    if (reply.destroyed || signal?.aborted) return undefined;
+    const answer = reply.answer();
+    return answer ? { ...answer, carriable: false } : undefined;
   };
 }
 
