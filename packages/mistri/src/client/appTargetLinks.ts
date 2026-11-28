@@ -81,12 +81,15 @@ export function configureAppTargetLinks(metadata: { basePath: string; appId: str
     const wake = () => {
       if (document.visibilityState !== 'hidden') refresh();
     };
+    const pageshow = (event: PageTransitionEvent) => {
+      if (event.persisted !== false) wake();
+    };
     addHostListener(window, 'focus', wake);
-    addHostListener(window, 'pageshow', wake);
+    addHostListener(window, 'pageshow', pageshow);
     addHostListener(document, 'visibilitychange', wake);
     removeWake = () => {
       removeHostListener(window, 'focus', wake);
-      removeHostListener(window, 'pageshow', wake);
+      removeHostListener(window, 'pageshow', pageshow);
       removeHostListener(document, 'visibilitychange', wake);
     };
   }

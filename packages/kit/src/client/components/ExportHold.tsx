@@ -8,6 +8,7 @@
  */
 import { useEffect, type ComponentProps } from 'react';
 import { createPortal } from 'react-dom';
+import { whenStartupReady } from '../startup.js';
 import { useCrumbSlots, verbsAt } from './crumbSlot.js';
 import { onDemand, useArrived } from './onDemand.js';
 import { say } from '../copy/workbench/components/Export.js';
@@ -28,7 +29,7 @@ function HeldTrigger() {
 /** Export's place at the end of the crumb bar, or of the list's heading row, while the rows are on their way. */
 export function ExportHold() {
   const tools = verbsAt(useCrumbSlots());
-  useEffect(() => void ExportPart.ready(), []);
+  useEffect(() => whenStartupReady(() => void ExportPart.ready()), []);
   if (!tools) return null;
   return createPortal(<HeldTrigger />, tools);
 }

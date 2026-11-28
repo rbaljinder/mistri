@@ -176,8 +176,16 @@ export function TenantChooser({
 
 /** The caller retains authority over switching. A click does not pretend that
  * a context was established, close the dialog, or alter the current label. */
-export function TenantControl({ actions = [], ...props }: TenantChooserProps & { actions?: readonly TenantControlAction[] }) {
+export function TenantControl({
+  actions = [],
+  onOpen,
+  ...props
+}: TenantChooserProps & { actions?: readonly TenantControlAction[]; onOpen?: () => void }) {
   const [open, setOpen] = useState(false);
+  const openSwitcher = () => {
+    onOpen?.();
+    setOpen(true);
+  };
   /* On a phone this control is the account menu's first item (tenantContextEntry.ts): what it says, and its door. */
   const { currentTenant, names, sandboxes, platformLabel, tenantLabel, busy = false } = props;
   useEffect(() => {
@@ -187,11 +195,14 @@ export function TenantControl({ actions = [], ...props }: TenantChooserProps & {
       name: nameOf(currentTenant, names, platformLabel),
       ...(sandboxes?.has(currentTenant) ? { sandbox: say('sandbox') } : {}),
       busy,
-      open: () => setOpen(true),
+      open: () => {
+        onOpen?.();
+        setOpen(true);
+      },
     };
     setTenantContextEntry(said);
     return () => setTenantContextEntry(undefined, said);
-  }, [currentTenant, names, sandboxes, platformLabel, tenantLabel, busy]);
+  }, [currentTenant, names, sandboxes, platformLabel, tenantLabel, busy, onOpen]);
   return (
     <span className="tenant-control">
       <button
@@ -201,7 +212,7 @@ export function TenantControl({ actions = [], ...props }: TenantChooserProps & {
         title={props.currentTenant === undefined ? undefined : nameOf(props.currentTenant, props.names, props.platformLabel)}
         aria-expanded={open}
         disabled={props.busy}
-        onClick={() => setOpen(true)}
+        onClick={openSwitcher}
       >
         <span>
           {props.currentTenant === undefined ? (

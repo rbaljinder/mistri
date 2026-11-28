@@ -255,5 +255,14 @@ export async function openPostgresDecisions(url: string): Promise<DecisionStore>
         throw error;
       }
     });
-  return createDecisionStore(transaction, q, () => connections.close());
+  const read = <T>(work: (db: Db) => Promise<T>): Promise<T> =>
+    connections.withReadClient((client) =>
+      work({
+        all: async (sql, ...params) => (await client.query(numbered(sql), params)).rows as Row[],
+        run: async () => {
+          throw new Error('Decision store read client cannot execute writes.');
+        },
+      }),
+    );
+  return createDecisionStore(transaction, q, () => connections.close(), read);
 }

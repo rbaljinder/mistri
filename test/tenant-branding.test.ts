@@ -278,6 +278,25 @@ test('every instance reads a save on its next page: the copy they share is dropp
   assert.equal(await two.presentation('south'), undefined);
 });
 
+test('concurrent state and presentation reads share one store lookup and memoize compiled presentations until save', async () => {
+  const app = brandedApp();
+  const store = memoryStore();
+  const cache = new MemoryCacheStore();
+  const service = createTenantBrandingService({ app, store, cache });
+  await service.save('north', { value: { name: 'North Co', accent: '#1d4ed8' } }, 'alice');
+  await cache.delete(`mistri:branding:${app.id}:north`);
+  const before = store.reads;
+  const [state, first] = await Promise.all([service.state('north'), service.presentation('north', { roles: ['admin'] })]);
+  assert.equal(store.reads, before + 1, 'concurrent state() and presentation() share one store read');
+  assert.equal(state.value.name, 'North Co');
+  const second = await service.presentation('north', { roles: ['admin'] });
+  assert.equal(second, first, 'repeated presentation() returns the memoized compiled object');
+  await service.save('north', { value: { name: 'North Updated', accent: '#1d4ed8' } }, 'alice');
+  const updated = await service.presentation('north', { roles: ['admin'] });
+  assert.notEqual(updated, first);
+  assert.equal(updated?.value.content.name, 'North Updated');
+});
+
 test("a tenant's mail wears its name, logo and accent, from validated values only", async () => {
   const brand: MailBrand = {
     name: 'North & <Co>',

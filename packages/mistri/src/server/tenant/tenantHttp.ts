@@ -56,7 +56,7 @@ import { businessCommandHttpError } from '../commands/businessCommandHttp.js';
 import { BusinessCommandExecutionError } from '../commands/businessCommandExecution.js';
 import { doorRefusal, writes as changesSomething, type Bound } from '@mistriwork/engine/server/http/trust.js';
 import { frontDoor } from '@mistriwork/engine/server/http/frontDoor.js';
-import { dispatchResourceReadHttp } from '@mistriwork/engine/server/resourceReadHttp.js';
+import { BREAKDOWN_BATCH, dispatchResourceReadHttp } from '@mistriwork/engine/server/resourceReadHttp.js';
 import { APP_READS } from '../app/appReads.js';
 import { CHOICE_HEADER, chosenFor, withChosen } from '../app/appChoices.js';
 import { CHOOSE_PATH } from '../app/appChoosing.js';
@@ -516,72 +516,51 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
       if (!get && !flagExposures) tenantRouteBody(path, input);
       assertActive();
       if (req.aborted || res.destroyed) return denyTenant();
-      if (path === TENANT_ENTER_PATH || path === '/api/tenant/bootstrap') {
+      if (path === '/api/tenant/bootstrap') {
         arrival = await arrivals.admit(controller.signal);
         assertActive();
         if (req.aborted || res.destroyed) return denyTenant();
-      }
-      if (path === '/api/tenant/bootstrap') {
         const found = await discoverFor(req);
         if (req.aborted || res.destroyed) return denyTenant();
         return send(req, res, 200, found);
       }
       if (path === TENANT_ENTER_PATH) {
-        /* The person's tenants, and where they are entered without being asked, the lease (tenantEnter.ts). */
         const asked = tenantEnterRequest(input, app.id) ?? invalid();
-        /* A reload: its tab's kept context taken back, and its boot read on it below, with no discovery and no
-           admission but the boot's own (tenantEnter.ts `reenterTenant`). Where it cannot be taken back, entered as
-           any other request is. */
-        const back = await reenterTenant({
-          req,
-          asked,
-          contexts,
-          verified,
-          whoami: async (proof) => whoami?.(req, expectedAccounts.get(req), proof),
-          assertActive,
-        });
+        const whoamiProof = async (proof: VerifiedSessionInstance | null) => whoami?.(req, expectedAccounts.get(req), proof);
+        const back = await reenterTenant({ req, asked, contexts, verified, whoami: whoamiProof, assertActive });
         if (back) {
-          parseTenantSelector([back.lease.tenantId]);
-          exposed(headers.tenant, back.lease.tenantId);
           entering = {
             found: { status: 'ready', appId: app.id, accountId: back.accountId, reentered: true },
             lease: back.lease,
             ...(back.whoami ? { whoami: back.whoami } : {}),
           };
-          control = false;
-          selectors = [back.lease.tenantId];
-          assertion = { tabId: back.lease.tabId, expectedContext: back.lease.context, expectedRevision: back.lease.revision };
-          input = { path: asked.page.path, search: asked.page.search, ...(asked.page.loaders ? { loaders: asked.page.loaders } : {}) };
-          path = TENANT_BOOT_PATH;
+        } else {
+          arrival = await arrivals.admit(controller.signal);
+          assertActive();
+          if (req.aborted || res.destroyed) return denyTenant();
+          const entered = await enterTenant({
+            req,
+            asked,
+            contexts,
+            discoverFor,
+            whoami: whoamiProof,
+            assertActive,
+            gone: () => req.aborted || res.destroyed,
+          });
+          if (!entered.lease || entered.sole === undefined)
+            return send(req, res, 200, entered.whoami ? { ...entered.found, whoami: entered.whoami } : entered.found);
+          entering = {
+            found: entered.found,
+            lease: entered.lease,
+            ...(entered.whoami ? { whoami: entered.whoami } : {}),
+            ...(entered.addresses ? { addresses: entered.addresses } : {}),
+          };
         }
-      }
-      if (path === TENANT_ENTER_PATH) {
-        const asked = tenantEnterRequest(input, app.id) ?? invalid();
-        const entered = await enterTenant({
-          req,
-          asked,
-          contexts,
-          discoverFor,
-          whoami: async (proof) => whoami?.(req, expectedAccounts.get(req), proof),
-          assertActive,
-          gone: () => req.aborted || res.destroyed,
-        });
-        const { lease, sole } = entered;
-        if (!lease || sole === undefined)
-          return send(req, res, 200, entered.whoami ? { ...entered.found, whoami: entered.whoami } : entered.found);
-        /* Entered: the page's boot on that lease, answered by the boot's own branch below as a `/api/boot` request
-           bearing the lease would be — its tenant as the selector, its tab, context and revision as the assertion,
-           the address as the boot's — so each of its reads is admitted on the lease and gated as its own request. */
-        parseTenantSelector([sole]);
-        exposed(headers.tenant, sole);
-        entering = {
-          found: entered.found,
-          lease,
-          ...(entered.whoami ? { whoami: entered.whoami } : {}),
-          ...(entered.addresses ? { addresses: entered.addresses } : {}),
-        };
+        const { lease } = entering;
+        parseTenantSelector([lease.tenantId]);
+        exposed(headers.tenant, lease.tenantId);
         control = false;
-        selectors = [sole];
+        selectors = [lease.tenantId];
         assertion = { tabId: lease.tabId, expectedContext: lease.context, expectedRevision: lease.revision };
         input = { path: asked.page.path, search: asked.page.search, ...(asked.page.loaders ? { loaders: asked.page.loaders } : {}) };
         path = TENANT_BOOT_PATH;
@@ -832,27 +811,32 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         const sessionOf = async () => (sessionAsked ? sessionAsked.value : verified(req));
         /* This member's stored picks in their tenant's own lease (tenantPreferences.ts); a platform or support lease holds none. */
         const storedFor = (context: ReadContext) => (picks ? picks.storedFor(context.principal, !platform && !onSupport) : {});
-        const tenantPerson = async (context: ReadContext, schema: ReturnType<typeof tenantServedSchema>) => {
-          const session = await sessionOf();
-          const staff = platform ? app.auth?.tenancy?.platform?.me : undefined;
-          const people = staff ? { ...app, auth: { ...app.auth!, me: staff } } : app;
-          const owned = people.auth?.me ? ownership.ownership[people.auth.me.from]?.kind : undefined;
-          const account = (context.principal as { accountId?: unknown }).accountId;
-          const own = !onSupport && owned === (platform ? 'platform' : 'tenant') && typeof account === 'string';
-          /* With the App-wide choices, read under this tenant's own reader: another tenant's site is no row it sees,
-             so a pick carried across tenants is dropped (appChoices.ts). */
-          const [person, chosen] = await Promise.all([
-            lookupTenantPerson(
-              people,
-              schema,
-              session?.identity.who ?? null,
-              own ? (account as string) : undefined,
-              readAdapter(context),
-              platform ? undefined : context.tenant,
-            ),
-            (async () => chosenFor(app, schema, readAdapter(context), req, await storedFor(context)))(),
-          ]);
-          return withChosen(person, chosen);
+        const personCache = new WeakMap<ReadContext, Promise<Awaited<ReturnType<typeof withChosen>>>>();
+        const tenantPerson = (context: ReadContext, schema: ReturnType<typeof tenantServedSchema>) => {
+          const cached = personCache.get(context);
+          if (cached) return cached;
+          const work = (async () => {
+            const session = await sessionOf();
+            const staff = platform ? app.auth?.tenancy?.platform?.me : undefined;
+            const people = staff ? { ...app, auth: { ...app.auth!, me: staff } } : app;
+            const owned = people.auth?.me ? ownership.ownership[people.auth.me.from]?.kind : undefined;
+            const account = (context.principal as { accountId?: unknown }).accountId;
+            const own = !onSupport && owned === (platform ? 'platform' : 'tenant') && typeof account === 'string';
+            const [person, chosen] = await Promise.all([
+              lookupTenantPerson(
+                people,
+                schema,
+                session?.identity.who ?? null,
+                own ? (account as string) : undefined,
+                readAdapter(context),
+                platform ? undefined : context.tenant,
+              ),
+              (async () => chosenFor(app, schema, readAdapter(context), req, await storedFor(context)))(),
+            ]);
+            return withChosen(person, chosen);
+          })();
+          personCache.set(context, work);
+          return work;
         };
         if (path === TENANT_EXPORT_PATH) {
           const readerEmail = computedSaysMe ? ((await sessionOf())?.identity.who ?? null) : null;
@@ -979,27 +963,30 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                       readTenantMessages({ app, schema: context.schema, query: context.data.query, tenant: wordsTenant }),
                     ))
                   : undefined;
-              const brandingAsked = forApp
-                ? asked(() =>
-                    scopedRecordBranding({
-                      app,
-                      schema: context.schema,
-                      data: context.data,
-                      owner: enrollment,
-                      source: ownership.source.id,
-                      req,
-                      publicly: false,
-                      tenant: brandingTenant(req, app, url, platform ? undefined : context.principal.tenantId),
-                    }),
-                  )
-                : undefined;
+              const brandingAsked =
+                forApp && app.ui.branding !== undefined
+                  ? asked(() =>
+                      scopedRecordBranding({
+                        app,
+                        schema: context.schema,
+                        data: context.data,
+                        owner: enrollment,
+                        source: ownership.source.id,
+                        req,
+                        publicly: false,
+                        tenant: brandingTenant(req, app, url, platform ? undefined : context.principal.tenantId),
+                      }),
+                    )
+                  : undefined;
               /* A tenant's own branding, where the App lets its tenants brand it: the lease's tenant, never one the
                  request names. The platform realm keeps the App's brand; a support operator sees the dealer's. */
               const tenantId = platform ? undefined : (context.principal as { tenantId?: unknown }).tenantId;
               const ownAsked =
                 forApp && tenantBranding && typeof tenantId === 'string'
                   ? asked(async () =>
-                      (await brandingAsked) ? undefined : tenantBranding.presentation(tenantId, { roles: context.principal.roles }),
+                      brandingAsked && (await brandingAsked)
+                        ? undefined
+                        : tenantBranding.presentation(tenantId, { roles: context.principal.roles }),
                     )
                   : undefined;
               const offeredTo = app.assistant?.roles;
@@ -1505,6 +1492,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
               weekStart: localeWeekStart(app.ui.locale),
               me: () => tenantPerson(context, schema),
               lastWave: bounded && !boundedBatch ? context.lastWave : undefined,
+              ...(bounded || path === TENANT_BOOT_PATH ? { concurrency: BREAKDOWN_BATCH } : {}),
             });
           const result = await (hasReplicas() && toleratesLag(path, input) ? lagTolerantReads(dispatch) : dispatch());
           if (!result) return denyTenant();
@@ -1570,9 +1558,17 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
              reader — they are awaited once its snapshot is over — so a pool of one reader runs them after it, as it
              did, a pool of two or more together, and neither can wait on the other. */
           const verbsAhead = new Map<string, Promise<unknown>>();
+          const checksAhead = new Map<string, Promise<unknown>>();
+          const startChecks = AsyncResource.bind(
+            (key: string, checks: Array<{ command: string; commandVersion: number; keys: unknown[] }>) => {
+              if (!checks.length || checksAhead.has(key)) return;
+              const started = askVerbs(checks);
+              started.catch(() => undefined);
+              checksAhead.set(key, started);
+            },
+          );
           const startVerbs = AsyncResource.bind((key: string, composed: unknown) => {
-            const verbs = withVerbs(composed);
-            /* Handled at once: a boot that fails before it awaits them must not leave a rejection no one hears. */
+            const verbs = withVerbs(composed, checksAhead.get(key));
             verbs.catch(() => undefined);
             verbsAhead.set(key, verbs);
           });
@@ -1582,9 +1578,6 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
               const schema = tenantServedSchema(context, app, appNow(), readerEmail);
               const answers: FirstPaintData['reads'] = {};
               const itemAnswers: FirstPaintData['items'] = {};
-              /* One read, as its own request would be gated and answered; a request fault (a bad question, a
-             record not found) is that read's alone and leaves the context standing. */
-              /* Each timed as a part of the request where server timing is on (serverTiming.ts), by its route alone. */
               const one = (target: string, body: Record<string, unknown> | undefined, kind?: string) =>
                 timedPart(
                   `read.${new URL(target, 'http://mistri.invalid').pathname.replace(/^\/api\//, '').replace(/[^a-z0-9-]+/gi, '.')}`,
@@ -1611,16 +1604,17 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                 } catch {
                   return undefined;
                 }
-                /* A page's header on the boot judges each item it carries: one outside the manifest is not carried,
-                 and the page asks it itself and hears the refusal. */
                 if (pageRefusal(context, schema, at, given)) return undefined;
                 const told = new ReadsTold();
+                const onChecks =
+                  at === '/api/pages/compose'
+                    ? (checks: Array<{ command: string; commandVersion: number; keys: unknown[] }>) =>
+                        startChecks(keyOf('POST', target, body), checks)
+                    : undefined;
                 try {
-                  const reply = await withReadKind(at, kind, () => route(context, schema, at, given, { query, told }));
+                  const reply = await withReadKind(at, kind, () => route(context, schema, at, given, { query, told, onChecks }));
                   return carriable(reply) ? { body: reply.body, reads: following ? told.value : undefined } : undefined;
                 } catch (error) {
-                  /* A refusal in the read's own words is the read's: the page asks it and hears them. One that is
-                 the context's ends the boot, as it would have ended the read. */
                   if (error instanceof TenantRequestFault || error instanceof HttpError) return undefined;
                   throw error;
                 }
@@ -1697,17 +1691,15 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
               return { reads: answers, items: itemAnswers };
             }),
           );
-          /* Entered, a boot that fails is the boot's alone: the lease is open and the page's, so it is answered
-             with discovery's, and the page asks its boot itself on it and hears why in that request's words. */
+          const settleAhead = () => Promise.allSettled([...verbsAhead.values(), ...checksAhead.values()]);
           const booted = entering
             ? await reading.catch(() => undefined)
             : await reading.catch(async (error: unknown) => {
-                await Promise.allSettled(verbsAhead.values());
+                await settleAhead();
                 throw error;
               });
           if (!booted) {
-            /* Nothing is left running behind a request: the verbs started ahead, whose answer is not carried. */
-            await Promise.allSettled(verbsAhead.values());
+            await settleAhead();
             /* A re-entry whose boot is refused is refused whole, and its context let go again: its lease was taken
                back on the boot's say-so alone, and the page enters afresh, through discovery, and hears why there. */
             if ('reentered' in entering!.found) {

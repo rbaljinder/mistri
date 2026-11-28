@@ -197,6 +197,9 @@ export function startTenantRenewal(options: TenantRenewalOptions = {}) {
     // account and context; do not manufacture a suspension before that check.
     void (options.onWake ? options.onWake() : check()).catch(() => {});
   };
+  const pageshow = (event: PageTransitionEvent) => {
+    if (event.persisted !== false) wake();
+  };
   const park = () => {
     parked = true;
     clearTimeout(renewalTimer);
@@ -230,14 +233,14 @@ export function startTenantRenewal(options: TenantRenewalOptions = {}) {
     removeHostListener(window, 'online', wake);
     removeHostListener(window, 'focus', wake);
     removeHostListener(window, 'pagehide', pagehide);
-    removeHostListener(window, 'pageshow', wake);
+    removeHostListener(window, 'pageshow', pageshow);
     removeHostListener(document, 'visibilitychange', visibility);
   }
   addHostListener(window, 'offline', suspend);
   addHostListener(window, 'online', wake);
   addHostListener(window, 'focus', wake);
   addHostListener(window, 'pagehide', pagehide);
-  addHostListener(window, 'pageshow', wake);
+  addHostListener(window, 'pageshow', pageshow);
   addHostListener(document, 'visibilitychange', visibility);
   if (document.visibilityState === 'hidden') park();
   else if (navigator.onLine === false) suspend();

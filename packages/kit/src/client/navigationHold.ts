@@ -39,6 +39,7 @@
 import { motionStill } from './motionStill.js';
 import { workMark, workSince } from './pendingWork.js';
 import { addHostListener, isFollowing, onNavigate, shellRoot } from './shellHost.js';
+import { whenStartupReady } from './startup.js';
 import { herePath, hereSearch } from './addressMount.js';
 
 /** How long a navigation holds the screen it left without saying so, in ms. */
@@ -137,32 +138,34 @@ export function installNavigationHold(host: HTMLElement, reads?: HoldProbe): voi
   onNavigate(() => {
     if (!isFollowing()) traversedAt = performance.now();
   }, true);
-  /* Warm linked stylesheet text once the browser is idle so boot never runs a
-     synchronous CSSOM serialization + replaceSync double-parse before first paint. */
+  /* Warm linked stylesheet text only after initial startup has revealed the page and the browser is idle,
+     so boot never runs stylesheet re-fetches or CSSStyleSheet.replaceSync double-parses before first paint. */
   const warm = () => {
     for (const sheet of Array.from(document.styleSheets)) {
       if (!sheet.disabled && sheet.href) readLinked(sheet.href);
     }
   };
-  const ric = (window as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
-  if (typeof ric === 'function') ric(warm, { timeout: 1500 });
-  else setTimeout(warm, 200);
-  /* And each one a part brings when it loads, as it arrives. The published
-     client links a part's stylesheet when the part is first drawn (a record's
-     sections, the related lists); read only at the next navigation, it was
-     still on its way then, and that navigation went unheld — the related
-     record painted into an empty pane. Under Vite every sheet is a style
-     element, whose text is there at once, so only the bundle showed it. */
-  if (typeof MutationObserver === 'function') {
-    new MutationObserver((records) => {
-      for (const record of records)
-        for (const node of Array.from(record.addedNodes)) {
-          if (!(node instanceof HTMLLinkElement) || !/\bstylesheet\b/i.test(node.rel) || !node.href) continue;
-          if (node.sheet) readLinked(node.href);
-          else node.addEventListener('load', () => readLinked(node.href), { once: true });
-        }
-    }).observe(document.head, { childList: true });
-  }
+  whenStartupReady(() => {
+    const ric = (window as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
+    if (typeof ric === 'function') ric(warm, { timeout: 1500 });
+    else setTimeout(warm, 200);
+    /* And each one a part brings when it loads, as it arrives. The published
+       client links a part's stylesheet when the part is first drawn (a record's
+       sections, the related lists); read only at the next navigation, it was
+       still on its way then, and that navigation went unheld — the related
+       record painted into an empty pane. Under Vite every sheet is a style
+       element, whose text is there at once, so only the bundle showed it. */
+    if (typeof MutationObserver === 'function') {
+      new MutationObserver((records) => {
+        for (const record of records)
+          for (const node of Array.from(record.addedNodes)) {
+            if (!(node instanceof HTMLLinkElement) || !/\bstylesheet\b/i.test(node.rel) || !node.href) continue;
+            if (node.sheet) readLinked(node.href);
+            else node.addEventListener('load', () => readLinked(node.href), { once: true });
+          }
+      }).observe(document.head, { childList: true });
+    }
+  });
   const input = (pointer: boolean) => (event: Event) => {
     lastInput = { pointer, at: performance.now(), target: event.target };
     if (hold) release();

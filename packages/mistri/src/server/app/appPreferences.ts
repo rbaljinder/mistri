@@ -77,7 +77,7 @@ export const preferencesAt = (app: AppDef, where: Where): Promise<PreferencesSto
 /* What a person's picks were read as, for a moment: every read of a request asks them (the person's row, a loader, a
    command), and a round trip to PostgreSQL for each would be paid again and again. A change made here forgets them, in
    every worker of this start too (processBus.ts); a change a replica made is read after TTL_MS. */
-const TTL_MS = 3000;
+const TTL_MS = 30_000;
 const recent = new Map<string, { at: number; picks: Promise<Record<string, string>> }>();
 const RECENT_MOST = 2000;
 const remembered = (app: string, subject: string, scope: string) => JSON.stringify([app, subject, scope]);

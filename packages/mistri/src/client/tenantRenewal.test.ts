@@ -243,6 +243,16 @@ test('pagehide parks before suspension so its lease listener cannot renew until 
   expect(identity.tenantLeaseActive()).toBe(true);
 });
 
+test('non-persisted initial pageshow does not trigger an unnecessary tenant lease renewal', async () => {
+  renew.mockImplementation(async (_owner, expected) => reply(expected.revision + 1));
+  start();
+  const initial = new Event('pageshow');
+  Object.defineProperty(initial, 'persisted', { value: false });
+  window.dispatchEvent(initial);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(renew).not.toHaveBeenCalled();
+});
+
 test('ordinary blur and a short hidden interval keep an unexpired lease active until foreground verification', async () => {
   const owner = identity.sessionIdentity();
   renew.mockImplementation(async (_owner, expected) => reply(expected.revision + 1));

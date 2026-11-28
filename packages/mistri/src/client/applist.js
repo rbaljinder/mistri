@@ -25,6 +25,7 @@ export { appListFor, appListQuery, appCrumbLabel } from '@mistriwork/kit/client/
  */
 export function loadSavedFilters() {
   const owner = sessionIdentity();
+  if (owner.tenantRequired) return Promise.resolve();
   return queryClient
     .prefetchQuery({
       queryKey: savedViewsKey(),

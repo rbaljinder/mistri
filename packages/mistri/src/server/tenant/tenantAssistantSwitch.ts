@@ -16,6 +16,19 @@ import { ASSISTANT_FEATURE, TENANT_SWITCH_TABLES } from '../../adapters/switch/t
 import { captureTenantData, denyTenant } from '@mistriwork/engine/server/evidence.js';
 import type { AdministrationAssistantImage, AdministrationUsageRow } from '../../shared/tenantAdministration.js';
 import { runtimeTable } from '@mistriwork/engine/shared/runtimeTables.js';
+import { publish } from '../processBus.js';
+
+/** Drop cached `/api/app` assistant-switch state across workers after a switch or tenant-closure commit. */
+export function evictAssistantSwitch(
+  app: string,
+  intent: { readonly operation: string; readonly tenantId?: string; readonly status?: string },
+): void {
+  if (
+    intent.tenantId &&
+    (intent.operation === 'setTenantAssistant' || (intent.operation === 'setTenantStatus' && intent.status === 'closed'))
+  )
+    publish('tenant-assistant.evict', JSON.stringify([app, intent.tenantId]));
+}
 
 export interface AssistantSwitchStore {
   /** The tenant's switch (off and unconsented when never set), or null when the database holds no assistant store. */

@@ -42,6 +42,10 @@ import { doorRefusal, type Bound } from '@mistriwork/engine/server/http/trust.js
 import { TENANT_ASSISTANT_RETENTION_DAYS, type TenantAssistantPolicy } from '../policy/appTenantPolicy.js';
 import { TenantLeaseError } from './tenantContexts.js';
 import { tenantHttpHeader } from './tenantHttp.js';
+import { subscribe } from '../processBus.js';
+
+const OFFERED_TTL_MS = 30_000;
+const OFFERED_MAX = 2000;
 
 interface TenantAssistantOptions {
   readonly app: AppDef;
@@ -108,14 +112,39 @@ export function createTenantAssistant(options: TenantAssistantOptions) {
     }
     return store;
   };
-  /** The tenant has the assistant: a model to talk to, and its switch on. Read each time; never cached. */
-  const offered = async (tenantId: string): Promise<boolean> => {
+  /** Live switch read (never cached), enforced on every `/api/assistant/*` request and before every model turn. */
+  const offeredLive = async (tenantId: string): Promise<boolean> => {
     if (!app.assistant || !assistantModel() || !tenantId || tenantId === PLATFORM_TENANT_ID) return false;
     try {
       return await (await storeOf()).tenantEnabled(app.id, tenantId);
     } catch {
       return false;
     }
+  };
+  /* Short-lived cache for `/api/app` UI presentation: evicted immediately across workers when tenant administration
+     toggles a switch or closes a tenant (`tenant-assistant.evict`). Assistant routes still check `offeredLive`. */
+  const offeredCache = new Map<string, { at: number; value: Promise<boolean> }>();
+  const stopEvictions = subscribe('tenant-assistant.evict', (key) => {
+    if (typeof key !== 'string') return;
+    try {
+      const [evictedApp, evictedTenant] = JSON.parse(key) as [unknown, unknown];
+      if (evictedApp === app.id && typeof evictedTenant === 'string') offeredCache.delete(evictedTenant);
+    } catch {
+      /* Ignore malformed eviction keys. */
+    }
+  });
+  const offered = (tenantId: string): Promise<boolean> => {
+    if (!app.assistant || !assistantModel() || !tenantId || tenantId === PLATFORM_TENANT_ID) return Promise.resolve(false);
+    const ts = now();
+    const held = offeredCache.get(tenantId);
+    if (held && ts >= held.at && ts - held.at < OFFERED_TTL_MS) return held.value;
+    const value = offeredLive(tenantId).catch(() => {
+      offeredCache.delete(tenantId);
+      return false;
+    });
+    if (offeredCache.size >= OFFERED_MAX) offeredCache.delete(offeredCache.keys().next().value!);
+    offeredCache.set(tenantId, { at: ts, value });
+    return value;
   };
 
   /** One request to the data server, answered in memory; undefined when it sent nothing or was stopped. */
@@ -265,6 +294,7 @@ export function createTenantAssistant(options: TenantAssistantOptions) {
       throw storeUnavailableReply(error);
     }
     const tenantId = lease.tenantId;
+    if (!(await offeredLive(tenantId))) throw new HttpError(403, 'The assistant is not offered to you here.');
     return {
       app,
       owner: { app: app.id, tenant: tenantId, account },
@@ -272,7 +302,7 @@ export function createTenantAssistant(options: TenantAssistantOptions) {
       loop: () => loop,
       ...(propose ? { propose } : {}),
       ...(policy?.tokensPerTenantPerDay === undefined ? {} : { tokensPerTenantPerDay: policy.tokensPerTenantPerDay }),
-      withdrawn: async () => ((await offered(tenantId)) ? undefined : 'The assistant was turned off for this customer.'),
+      withdrawn: async () => ((await offeredLive(tenantId)) ? undefined : 'The assistant was turned off for this customer.'),
     };
   };
 
@@ -307,6 +337,8 @@ export function createTenantAssistant(options: TenantAssistantOptions) {
       stopPurging = purgeOnSchedule(purge);
     },
     async close(): Promise<void> {
+      stopEvictions();
+      offeredCache.clear();
       stopPurging?.();
       stopPurging = undefined;
       const opened = store;

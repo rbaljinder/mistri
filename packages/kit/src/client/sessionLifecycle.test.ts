@@ -419,6 +419,24 @@ test('BFCache parking locks the captured surface without broadcasting or reloadi
   expect(identity.sessionIdentity().mode).toBe('authenticated');
 });
 
+test('non-persisted initial pageshow does not trigger a spurious whoami verification', async () => {
+  const pageEvent = (name: string, persisted: boolean) => {
+    const event = new Event(name);
+    Object.defineProperty(event, 'persisted', { value: persisted });
+    return event;
+  };
+  identity.establishSessionIdentity(account());
+  const onCheck = vi.fn(async () => new Response(JSON.stringify(account()), { status: 200 }));
+  lifecycle.configureSessionLifecycle({ onLock: vi.fn(), onReload: vi.fn(), onCheck });
+  stop = lifecycle.startSessionMonitoring();
+  window.dispatchEvent(pageEvent('pageshow', false));
+  await Promise.resolve();
+  expect(onCheck).not.toHaveBeenCalled();
+  window.dispatchEvent(pageEvent('pageshow', true));
+  await Promise.resolve();
+  expect(onCheck).toHaveBeenCalledOnce();
+});
+
 test.each(['network', '503', 'timeout', 'context network', 'context timeout'])(
   'tenant %s suspends through the seam without retiring drafts',
   async (failure) => {

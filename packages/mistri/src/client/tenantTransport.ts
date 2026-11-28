@@ -978,9 +978,19 @@ export async function tenantReadApi(
   for (const [key, named] of Object.entries(selector(owner.tenantId))) url.searchParams.set(key, named);
   /* As the server keys what the page's boot carried (shared/tenantBoot.ts `tenantReadAddress`). */
   const address = `${url.pathname}${url.search}`;
-  /* The page's boot answered this request on this very lease (tenantBootLoad.ts): its answer, once. */
+  /* The page's boot answered this request on this very context (tenantBootLoad.ts): its answer, once. Match the
+     same context identity rather than object reference so a routine lease renewal (revision bump) never discards
+     unconsumed boot-carried reads. */
   const carried = firstPaintRead(payload === undefined ? 'GET' : 'POST', address, payload);
-  if (carried && boots.get(carried.body as object) === owner && currentLease(snapshot, owner)) {
+  const carriedOwner = carried ? boots.get(carried.body as object) : undefined;
+  const sameContext =
+    carriedOwner !== undefined &&
+    carriedOwner.appId === owner.appId &&
+    carriedOwner.accountId === owner.accountId &&
+    carriedOwner.tenantId === owner.tenantId &&
+    carriedOwner.tabId === owner.tabId &&
+    carriedOwner.context === owner.context;
+  if (carried && sameContext && currentLease(snapshot, owner)) {
     publishable(snapshot, owner);
     fileReads(carried.body, carried.reads);
     return carried.body as Record<string, unknown>;
