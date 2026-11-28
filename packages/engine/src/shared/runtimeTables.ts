@@ -69,7 +69,7 @@ export const isRuntimeRelation = (dialect: RuntimeDialect, schema: string | null
 };
 
 /** The functions the runtime schema may hold beside its tables, each a store's own (the epoch
- * trigger's, and the append-only triggers of flags, experiments and analytics). Ownership checks
+ * trigger's, and the append-only triggers of flags, experiments, analytics and read audit). Ownership checks
  * count anything else there, a function, operator or type, as planted: Better Auth resolves its
  * unqualified names through this schema. */
 export const RUNTIME_SCHEMA_FUNCTIONS: readonly string[] = Object.freeze([
@@ -77,6 +77,7 @@ export const RUNTIME_SCHEMA_FUNCTIONS: readonly string[] = Object.freeze([
   'flag_immutable',
   'experiment_immutable',
   'analytics_append_only',
+  'read_audit_append_only',
 ]);
 
 /** The store prefixes whose owner may be a role other than the schema's: a suite's flag or

@@ -494,7 +494,8 @@ export async function openSqliteTenantWriteSource(
         }
       },
     });
-    const closing = life.closing;
+    let stoppingOutbox = false;
+    const closing = () => stoppingOutbox || life.closing();
     const close = life.close;
     /* One transaction for every kind. The kind (tenantWriteKind*.ts) says what
        its evidence means here: capture, scope, fence, journal owner and managed
@@ -727,9 +728,15 @@ export async function openSqliteTenantWriteSource(
       await existingReadAuditOutbox(auditOutboxKey)?.flush();
       return queue.run(() => appStoresOf(life.handle()).readReadAudit(captured));
     };
-    const closeAll = async (): Promise<void> => {
-      await closeReadAuditOutbox(auditOutboxKey);
-      await close();
+    let closingAll: Promise<void> | undefined;
+    const closeAll = (): Promise<void> => {
+      stoppingOutbox = true;
+      return (closingAll ??= existingReadAuditOutbox(auditOutboxKey)
+        ? closeReadAuditOutbox(auditOutboxKey).then(
+            () => close(),
+            () => close(),
+          )
+        : close());
     };
     const source = Object.freeze<TenantWriteSource>({
       ownership: owned,
@@ -938,7 +945,8 @@ export async function openPostgresTenantWriteSource(
         },
       });
     }
-    const closing = life.closing;
+    let stoppingOutbox = false;
+    const closing = () => stoppingOutbox || life.closing();
     /* One promise for every caller, as the lifecycle's own close is: a second close waits on the first. */
     const both = ownerLife;
     let closingBoth: Promise<void> | undefined;
@@ -1384,9 +1392,15 @@ export async function openPostgresTenantWriteSource(
       await existingReadAuditOutbox(auditOutboxKey)?.flush();
       return queue.run([], () => appStoresOf(life.handle()).readReadAudit(captured));
     };
-    const closeAll = async (): Promise<void> => {
-      await closeReadAuditOutbox(auditOutboxKey);
-      await close();
+    let closingAll: Promise<void> | undefined;
+    const closeAll = (): Promise<void> => {
+      stoppingOutbox = true;
+      return (closingAll ??= existingReadAuditOutbox(auditOutboxKey)
+        ? closeReadAuditOutbox(auditOutboxKey).then(
+            () => close(),
+            () => close(),
+          )
+        : close());
     };
     const source = Object.freeze<TenantWriteSource>({
       ownership: owned,
