@@ -403,6 +403,7 @@ async function request(
     const failure = Object.assign(new Error(typeof value.error === 'string' ? value.error : say('theTenantRequestWasRefused')), {
       status: response.status,
       ...(typeof value.code === 'string' ? { code: value.code } : {}),
+      ...(value.lost === true ? { lost: true } : {}),
       ...(retryAfterMs !== undefined ? { retryAfter: retryAfterMs } : {}),
       ...(errorClaim !== undefined ? { errorClaim } : {}),
     });
@@ -822,18 +823,20 @@ export async function renewTenant(
       true,
     ));
   } catch (error) {
-    const { status, code } = error as { status?: unknown; code?: unknown };
+    const { status, code, lost } = error as { status?: unknown; code?: unknown; lost?: unknown };
     if (leaseRefusal(status, code)) {
       fence(snapshot, lease);
       throw error;
     }
     if (contextUnavailable(status, code)) {
       if (!currentLease(snapshot, lease)) throw error;
-      /* A container restart forgot this tab's in-memory context: re-enter the same tenant automatically,
-         suspending on a transient blip and locking only when re-entry itself is refused. */
-      const next = await reenteredLease(snapshot, lease);
-      if (next.kind === 'entered') return next.lease;
-      if (next.kind === 'transient') throw next.error;
+      /* Only a lost context (server restart forgot the tab while the session is still valid) auto-reenters;
+         a retired login instance or revoked grant must lock immediately. */
+      if (lost === true) {
+        const next = await reenteredLease(snapshot, lease);
+        if (next.kind === 'entered') return next.lease;
+        if (next.kind === 'transient') throw next.error;
+      }
       if (currentLease(snapshot, lease)) invalidateTenantContext(snapshot);
       throw error;
     }

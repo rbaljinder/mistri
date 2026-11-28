@@ -273,13 +273,13 @@ test.describe('Depot inventory operations', () => {
       await expect(page.getByRole('heading', { name: `PO-${draft}`, exact: true })).toBeVisible();
       const order = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Order', exact: true }) });
       await expect(order).toContainText(/Status\s*Draft/);
-      let out = 0;
+      const inFlight = new Set<unknown>();
       page.on('request', (request) => {
-        if (new URL(request.url()).pathname.startsWith('/api/')) out++;
+        if (new URL(request.url()).pathname.startsWith('/api/')) inFlight.add(request);
       });
       for (const settled of ['requestfinished', 'requestfailed'] as const)
         page.on(settled, (request) => {
-          if (new URL(request.url()).pathname.startsWith('/api/')) out--;
+          inFlight.delete(request);
         });
       await page.route('**/api/pages/compose*', async (route) => {
         composing++;
@@ -307,7 +307,7 @@ test.describe('Depot inventory operations', () => {
       expect(scalar(sample.db, "SELECT status || ':' || version FROM purchase_order WHERE id = ?", draft)).toBe('cancelled:2');
 
       // Once every compose has landed and every read is in, the page is the order as stored, and stays so.
-      await expect.poll(() => composing + out, { timeout: 20_000 }).toBe(0);
+      await expect.poll(() => composing + inFlight.size, { timeout: 20_000 }).toBe(0);
       await expect(order).toContainText(/Status\s*Cancelled/);
       await expect(page.getByRole('main')).toContainText('Cancelled: Supplier closed');
       /* A kept compose redrew the old status a moment after the new one showed: look again once it would have. */
@@ -557,7 +557,7 @@ test.describe('Depot inventory operations', () => {
       );
       expect(low.length).toBeGreaterThan(3);
       await page.goto(`${sample.origin}/products?tab=low_stock`);
-      await expect(page.getByRole('tab', { name: new RegExp(`^Low stock\\s*${low.length}$`) })).toBeVisible();
+      await expect(page.getByRole('tab', { name: 'Low stock', exact: true })).toBeVisible();
       // The first page of them, each one of the SKUs the fixture says are short, and none other.
       const grid = page.getByRole('grid').first();
       // A list opens on fifty rows (LIST_PAGE_SIZE).

@@ -1113,22 +1113,36 @@ describe('a loader reads as the reader, never writes, and ends', () => {
     );
   });
 
-  test('a loader that throws logs its name and cause and fails with loader_failed instead of bubbling raw', async (t) => {
+  test('a loader that throws logs its name and cause and answers 500 loader_failed at the HTTP route instead of bubbling raw', async (t) => {
     const at = await reader(t);
     const logged: string[] = [];
     t.mock.method(console, 'error', (...args: unknown[]) => {
       logged.push(args.map(String).join(' '));
     });
-    const broken = loader(() => {
-      throw new Error('query refused by engine');
+    const loaders = defineLoaders({
+      ...(LOADERS as object),
+      board: defineLoader({
+        reads: ['ticket'],
+        load: () => {
+          throw new Error('query refused by engine');
+        },
+      }),
+    }) as never;
+    const reply = await pageLoad({
+      app: parse(),
+      roles: ['clerk'],
+      signedIn: true,
+      loaders,
+      body: { page: 'board' },
+      reader: at.adapter,
+      schema: at.schema,
     });
-    await assert.rejects(
-      run(broken, at),
-      (error: { code?: string; status?: number; message?: string }) =>
-        error.code === 'loader_failed' && error.status === 500 && error.message === 'This page could not load.',
-    );
+    assert.deepEqual(reply, {
+      status: 500,
+      body: { error: 'This page could not load.', code: 'loader_failed' },
+    });
     assert.ok(
-      logged.some((line) => line.includes('page loader "x" failed') && line.includes('query refused by engine')),
+      logged.some((line) => line.includes('page loader "board" failed') && line.includes('query refused by engine')),
       `expected loader name and cause in server log, got: ${logged.join(' | ')}`,
     );
   });

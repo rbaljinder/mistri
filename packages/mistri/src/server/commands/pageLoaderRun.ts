@@ -4,14 +4,12 @@
  * its result held to a size (pageLoaders.ts says what a loader is).
  */
 import type { Adapter } from '@mistriwork/engine/adapters/adapter.js';
-import { databaseUnanswered, TenantContextError } from '@mistriwork/engine/server/evidence.js';
 import { cteTables, remapCteTables } from '@mistriwork/engine/shared/cte.js';
 import { renamedAnyRows } from '@mistriwork/engine/shared/filter.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { ResourceReadError, readView, readViewCount, type ResourceReader } from '@mistriwork/engine/server/resourceReadOperations.js';
 import type { ViewDef } from '@mistriwork/engine/shared/view.js';
 import { chosenContext, type Chosen } from '../app/appChoices.js';
-import { readNotRecorded } from '../readAudit.js';
 import { zoneDay, zoned } from './currentZone.js';
 import { commandCatalog, createCommandDb, cteOf, zonedCatalog, type ReadTable, type UntypedRow } from './commandDb.js';
 import { isBusinessCommandExecutionError } from './commandErrors.js';
@@ -338,12 +336,7 @@ export async function runPageLoader(options: {
         ? new PageLoaderRefused(404, 'not_found', error.message)
         : new PageLoaderRefused(422, 'loader_refused', error.message);
     }
-    /* Database unavailability, read-audit failures and genuine tenant denials keep their own transport status;
-       every other failure — a refused query or a throw in the loader itself — belongs to this page alone and
-       must never bubble up as a tenant context denial ("Session unavailable"). */
-    if (readNotRecorded(error) || databaseUnanswered(error) || error instanceof TenantContextError) throw error;
-    console.error(`mistri: page loader "${options.name}" failed: ${error instanceof Error ? error.message : String(error)}`);
-    throw new PageLoaderRefused(500, 'loader_failed', 'This page could not load.', { cause: error });
+    throw error;
   } finally {
     open = false;
     clearTimeout(timer);

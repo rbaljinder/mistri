@@ -164,10 +164,15 @@ export function refusedWriteBody(path: string, refusal: { readonly code: string;
   const side = path === '/api/delete' ? { deleted: false } : path === '/api/revert' ? { reverted: false } : {};
   return { error: refusal.message, code: refusal.code, outcome, ...side };
 }
-/** A write whose context this server no longer holds (a restart forgot it) and that ran nothing: refused as the
- * context, as a read is, never as the person's role, so the page can enter again and send once more. */
-export function lostContext(error: unknown, path: string): ReturnType<typeof refusedWriteBody> | undefined {
-  return tenantContextLost(error) && (error instanceof BusinessCommandExecutionError || error instanceof TenantWriteFailure)
+/** A write or renewal whose context this server no longer holds (a restart forgot it) and that ran nothing: refused as the
+ * context, never as the person's role, so the page can enter again (while retired login instances still lock). */
+export function lostContext(
+  error: unknown,
+  path: string,
+): ReturnType<typeof refusedWriteBody> | { error: string; code: string; lost: true } | undefined {
+  if (!tenantContextLost(error)) return undefined;
+  if (path.endsWith('/renew') && error instanceof TenantContextError) return { error: error.message, code: error.code, lost: true };
+  return error instanceof BusinessCommandExecutionError || error instanceof TenantWriteFailure
     ? refusedWriteBody(path, new TenantContextError(), error.outcome)
     : undefined;
 }
@@ -1178,8 +1183,16 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
       const tab = tabs.get(expected.tabId),
         lease = tab?.lease;
       // A renewal keeps the lease's own realm and tenant; it never changes either.
+      if (!tab) {
+        await session(request);
+        try {
+          return denyTenant();
+        } catch (error) {
+          if (error instanceof Error) lostContexts.add(error);
+          throw error;
+        }
+      }
       if (
-        !tab ||
         !lease ||
         lease.token !== expected.expectedContext ||
         lease.realm !== chosen.realm ||

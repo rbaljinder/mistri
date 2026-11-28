@@ -873,11 +873,16 @@ test.each(['network', '503'])(
   },
 );
 
+const lostContextReply = () =>
+  new Response(JSON.stringify({ error: 'The tenant context is unavailable.', code: 'tenant_context_unavailable', lost: true }), {
+    status: 403,
+  });
+
 test('renewTenant automatically re-enters when the server restarted and forgot the context', async () => {
   const original = proof(),
     entered = { ...original, tabId: 'tab-reentered', context: 'context-reentered' },
     owner = session.establishTenantSelection(original);
-  const fetcher = vi.fn().mockResolvedValueOnce(unavailableContext()).mockResolvedValueOnce(reply(entered, entered));
+  const fetcher = vi.fn().mockResolvedValueOnce(lostContextReply()).mockResolvedValueOnce(reply(entered, entered));
   vi.stubGlobal('fetch', fetcher);
   const next = await transport.renewTenant(owner, original);
   expect(next).toEqual(entered);
@@ -889,12 +894,22 @@ test('renewTenant automatically re-enters when the server restarted and forgot t
   expect(session.tenantLeaseActive()).toBe(true);
 });
 
-test('renewTenant locks only when re-entry is refused, and keeps transient errors recoverable', async () => {
+test('renewTenant locks immediately on retired login instance or revoked grant without re-entering', async () => {
+  const original = proof(),
+    owner = session.establishTenantSelection(original);
+  const fetcher = vi.fn().mockResolvedValueOnce(unavailableContext());
+  vi.stubGlobal('fetch', fetcher);
+  await expect(transport.renewTenant(owner, original)).rejects.toMatchObject({ status: 403, code: 'tenant_context_unavailable' });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(session.sessionIdentity().mode).toBe('locked');
+});
+
+test('renewTenant locks only when restart re-entry is refused, and keeps transient errors recoverable', async () => {
   const original = proof(),
     owner = session.establishTenantSelection(original);
   const transientFetcher = vi
     .fn()
-    .mockResolvedValueOnce(unavailableContext())
+    .mockResolvedValueOnce(lostContextReply())
     .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Failover', code: 'tenant_temporarily_unavailable' }), { status: 503 }));
   vi.stubGlobal('fetch', transientFetcher);
   const transientError = await transport.renewTenant(owner, original).catch((error) => error);
@@ -903,7 +918,7 @@ test('renewTenant locks only when re-entry is refused, and keeps transient error
 
   const refusedFetcher = vi
     .fn()
-    .mockResolvedValueOnce(unavailableContext())
+    .mockResolvedValueOnce(lostContextReply())
     .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Denied', code: 'forbidden' }), { status: 403 }));
   vi.stubGlobal('fetch', refusedFetcher);
   await expect(transport.renewTenant(owner, original)).rejects.toMatchObject({ status: 403, code: 'tenant_context_unavailable' });
