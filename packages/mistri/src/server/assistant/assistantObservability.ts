@@ -496,6 +496,7 @@ export async function runAppEvalSuite(params: {
       owner: params.owner,
       conversation: 'eval-conv',
       model: caseModel,
+      resolveModel: resolveAssistantModel,
       assistant: runAssistant,
       baseAssistant,
       ...(activeAgent ? { activeAgent } : {}),

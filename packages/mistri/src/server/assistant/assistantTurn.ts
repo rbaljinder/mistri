@@ -13,14 +13,7 @@
  */
 import { DEFAULT_ASSISTANT_STEPS, resolveAgentAssistant, type AppAssistant, type AppAssistantAgent } from '../../shared/appAssistant.js';
 import type { AssistantOwner, AssistantStore, ConversationState, StoredEvent } from '../../adapters/assistant/assistantStore.js';
-import {
-  resolveAssistantModel,
-  type AssistantModel,
-  type ModelBlock,
-  type ModelMessage,
-  type ModelTool,
-  type ModelUsage,
-} from './assistantModel.js';
+import type { AssistantModel, ModelBlock, ModelMessage, ModelTool, ModelUsage } from './assistantModel.js';
 import type { ModelRefusal } from './assistantModelRefusal.js';
 import {
   answerTool,
@@ -269,6 +262,8 @@ interface TurnContext {
   owner: AssistantOwner;
   conversation: string;
   model: AssistantModel;
+  /** Optional provider/fallback resolver for delegated child subagents (passed by callers to keep turn logic cycle-free). */
+  resolveModel?: (assistant: AppAssistant) => AssistantModel | undefined;
   assistant: AppAssistant;
   /** Un-narrowed top-level assistant definition, used to resolve sibling subagents on `delegate`. */
   baseAssistant?: AppAssistant;
@@ -454,7 +449,7 @@ async function runDelegation(
       if (refused) throw new Error(refused);
       const last = step === maxSteps;
       let stepReasoning = '';
-      const childModel = resolveAssistantModel(childAssistant) ?? context.model;
+      const childModel = context.resolveModel?.(childAssistant) ?? context.model;
       const reply = await childModel.stream(
         {
           model: childAssistant.model,

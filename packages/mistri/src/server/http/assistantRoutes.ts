@@ -1227,6 +1227,7 @@ export async function answerAssistant(
       owner,
       conversation: conversation!.id,
       model: resolveAssistantModel(effectiveAssistant) ?? model,
+      resolveModel: resolveAssistantModel,
       assistant: effectiveAssistant,
       baseAssistant: assistant,
       ...(activeAgent ? { activeAgent } : {}),
