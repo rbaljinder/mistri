@@ -83,7 +83,7 @@ export function FilterTabs({ tabs, lit, onPick, semantics = 'tablist', name, ext
             {...foldMark(i)}
           >
             <span>{tab.label}</span>
-            <TabCount counted={tab.count} />
+            {tab.count !== undefined && <TabCount counted={tab.count} />}
           </button>
         ))}
         {extra?.row((at) => foldMark(after + at))}
@@ -100,7 +100,7 @@ export function FilterTabs({ tabs, lit, onPick, semantics = 'tablist', name, ext
             folded.has(i) ? (
               <DropItem key={tab.key} className="page-actions-item" onClick={() => onPick(i)}>
                 <span>{tab.label}</span>
-                <TabCount counted={tab.count} />
+                {tab.count !== undefined && <TabCount counted={tab.count} />}
               </DropItem>
             ) : null,
           )}

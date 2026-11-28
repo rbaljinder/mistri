@@ -257,9 +257,14 @@ async function renewedLease(snapshot: SessionIdentitySnapshot, refused: TenantCo
    denial of the person's role. A renewal cannot help, since the server holds nothing to renew, so the page enters the
    same tenant again, once for every request refused together, and sends the refused request once more under it. */
 const contextUnavailable = (status: unknown, code: unknown): boolean => status === 403 && code === 'tenant_context_unavailable';
-const reentering = new WeakMap<SessionIdentitySnapshot, Promise<TenantContextReply | undefined>>();
-/** A fresh context for the tenant `refused` named, entered once however many requests were refused: or none. */
-async function reenteredLease(snapshot: SessionIdentitySnapshot, refused: TenantContextReply): Promise<TenantContextReply | undefined> {
+type ReentryResult =
+  | { readonly kind: 'entered'; readonly lease: TenantContextReply }
+  | { readonly kind: 'transient'; readonly error: Error }
+  | { readonly kind: 'refused' };
+
+const reentering = new WeakMap<SessionIdentitySnapshot, Promise<ReentryResult>>();
+/** A fresh context for the tenant `refused` named, entered once however many requests were refused: or why it failed. */
+async function reenteredLease(snapshot: SessionIdentitySnapshot, refused: TenantContextReply): Promise<ReentryResult> {
   const entered = () => {
     const lease = snapshot === captureSessionIdentity() ? captureTenantLease(snapshot) : undefined;
     return lease &&
@@ -269,10 +274,11 @@ async function reenteredLease(snapshot: SessionIdentitySnapshot, refused: Tenant
       ? lease
       : undefined;
   };
-  if (entered()) return entered();
+  const already = entered();
+  if (already) return { kind: 'entered', lease: already };
   let pending = reentering.get(snapshot);
   if (!pending) {
-    pending = (async () => {
+    pending = (async (): Promise<ReentryResult> => {
       try {
         account(snapshot);
         const { value, response } = await request(
@@ -282,17 +288,23 @@ async function reenteredLease(snapshot: SessionIdentitySnapshot, refused: Tenant
         );
         const reply = context(value, snapshot, response);
         adoptTenantReentry(snapshot, refused, reply);
-        return reply;
-      } catch {
-        return undefined;
+        const adopted = entered();
+        return adopted ? { kind: 'entered', lease: adopted } : { kind: 'refused' };
+      } catch (error) {
+        if (isTransientTenantFailure(error)) return { kind: 'transient', error: error as Error };
+        return { kind: 'refused' };
       } finally {
         reentering.delete(snapshot);
       }
     })();
     reentering.set(snapshot, pending);
   }
-  await pending;
-  return entered();
+  const outcome = await pending;
+  if (outcome.kind === 'entered') {
+    const live = entered();
+    return live ? { kind: 'entered', lease: live } : { kind: 'refused' };
+  }
+  return outcome;
 }
 /* Said when entering again could not stand in for the context the server forgot: the page, not the person's role. */
 const reloadNeeded = (error: Error, code: unknown): Error =>
@@ -394,9 +406,16 @@ async function request(
       ...(retryAfterMs !== undefined ? { retryAfter: retryAfterMs } : {}),
       ...(errorClaim !== undefined ? { errorClaim } : {}),
     });
-    /* A read the audit could not record (503 read_not_recorded) is that read's answer alone: tagged slow, a read
-       retried it until it fenced the lease, and one list the audit could not keep paused the whole page. */
-    throw transient(response) && value.code !== 'read_not_recorded' ? slow(failure) : failure;
+    /* A read the audit could not record (503 read_not_recorded) or a page loader's own failure (loader_failed,
+       loader_timeout, loader_too_large, loader_result) belongs to that request alone: tagged slow, a read retried
+       it until it fenced the lease and paused the whole shell. */
+    const requestLocal =
+      value.code === 'read_not_recorded' ||
+      value.code === 'loader_failed' ||
+      value.code === 'loader_timeout' ||
+      value.code === 'loader_too_large' ||
+      value.code === 'loader_result';
+    throw transient(response) && !requestLocal ? slow(failure) : failure;
   }
   return { response, value };
 }
@@ -788,15 +807,38 @@ export async function renewTenant(
     lease.revision === Number.MAX_SAFE_INTEGER
   )
     throw unavailable();
-  const { value, response } = await request(
-    snapshot,
-    `/api/tenant/context/renew?${new URLSearchParams({ app: lease.appId, ...selector(lease.tenantId) })}`,
-    { tabId: lease.tabId, expectedContext: lease.context, expectedRevision: lease.revision },
-    undefined,
-    signal,
-    false,
-    lease,
-  );
+  let value: Record<string, unknown>;
+  let response: Response;
+  try {
+    ({ value, response } = await request(
+      snapshot,
+      `/api/tenant/context/renew?${new URLSearchParams({ app: lease.appId, ...selector(lease.tenantId) })}`,
+      { tabId: lease.tabId, expectedContext: lease.context, expectedRevision: lease.revision },
+      undefined,
+      signal,
+      false,
+      lease,
+      undefined,
+      true,
+    ));
+  } catch (error) {
+    const { status, code } = error as { status?: unknown; code?: unknown };
+    if (leaseRefusal(status, code)) {
+      fence(snapshot, lease);
+      throw error;
+    }
+    if (contextUnavailable(status, code)) {
+      if (!currentLease(snapshot, lease)) throw error;
+      /* A container restart forgot this tab's in-memory context: re-enter the same tenant automatically,
+         suspending on a transient blip and locking only when re-entry itself is refused. */
+      const next = await reenteredLease(snapshot, lease);
+      if (next.kind === 'entered') return next.lease;
+      if (next.kind === 'transient') throw next.error;
+      if (currentLease(snapshot, lease)) invalidateTenantContext(snapshot);
+      throw error;
+    }
+    throw error;
+  }
   try {
     const reply = context(value, snapshot, response, true);
     if (
@@ -1039,16 +1081,20 @@ export async function tenantReadApi(
         continue;
       }
       if (!renewed && contextUnavailable(status, code)) {
-        // A context the server forgot: entered again and asked once more; not entered, refused as before.
+        // A context the server forgot: entered again and asked once more; transient blip suspends, refusal locks.
         renewed = true;
         const next = await reenteredLease(snapshot, owner);
-        if (!next) {
-          if (currentLease(snapshot, owner)) invalidateTenantContext(snapshot);
-          throw reloadNeeded(error as Error, code);
+        if (next.kind === 'entered') {
+          owner = next.lease;
+          attempt--;
+          continue;
         }
-        owner = next;
-        attempt--;
-        continue;
+        if (next.kind === 'transient') {
+          fence(snapshot, owner);
+          throw next.error;
+        }
+        if (currentLease(snapshot, owner)) invalidateTenantContext(snapshot);
+        throw reloadNeeded(error as Error, code);
       }
       if (renewed && contextUnavailable(status, code)) throw reloadNeeded(error as Error, code);
       // An old revision's slow answer is that revision's alone: no retry, no fence (as for any of its answers).
@@ -1335,7 +1381,23 @@ export async function tenantMutationApi(
     const { code } = delivered.value;
     if (renewed || !(leaseRefusal(status, code) || contextUnavailable(status, code)) || delivered.value.outcome !== 'not_applied') break;
     // A context the server forgot is entered again (reenteredLease); a stale or expired one is renewed.
-    const next = contextUnavailable(status, code) ? await reenteredLease(snapshot, owner) : await renewedLease(snapshot, owner);
+    if (contextUnavailable(status, code)) {
+      const next = await reenteredLease(snapshot, owner);
+      if (next.kind === 'entered') {
+        owner = next.lease;
+        continue;
+      }
+      if (next.kind === 'transient') {
+        fence(snapshot, owner);
+        const detail = next.error as { status?: number; code?: string };
+        throw mutationError(next.error.message, 'not_applied', {
+          ...(detail.status !== undefined ? { status: detail.status } : {}),
+          ...(detail.code !== undefined ? { code: detail.code } : {}),
+        });
+      }
+      break;
+    }
+    const next = await renewedLease(snapshot, owner);
     if (!next) break;
     owner = next;
   }

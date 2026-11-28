@@ -58,7 +58,10 @@ async function enableSidebarCounts(page: Page): Promise<void> {
     payload.app.ui.shell = { ...payload.app.ui.shell, counts: true };
     /* Every list says it is counted: this spec is of the counting, not of which lists are work
        (shared/menuCounts.ts, test/menu-counts.test.ts). */
-    for (const view of Object.values(payload.app.views ?? {})) if (typeof view.table === 'string') view.count ??= true;
+    for (const view of Object.values(payload.app.views ?? {})) {
+      if (typeof view.table === 'string') view.count ??= true;
+      if (view.table === 'issue' && Array.isArray(view.tabs)) view.tabCounts ??= true;
+    }
     await route.fulfill({ response, json: payload });
   });
 }

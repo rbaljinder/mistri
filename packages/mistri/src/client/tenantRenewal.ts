@@ -137,7 +137,9 @@ export function startTenantRenewal(options: TenantRenewalOptions = {}) {
     running = Promise.resolve().then(async () => {
       try {
         for (let receipt = 0; receipt < 2; receipt++) {
-          attempt ??= captureTenantLease(owner);
+          const live = captureTenantLease(owner);
+          if (attempt && live && (live.tabId !== attempt.tabId || live.context !== attempt.context)) attempt = undefined;
+          attempt ??= live;
           if (!attempt) throw new Error(say('tenantLeaseIsUnavailable'));
           const expected = attempt;
           const uninterrupted = interruption;
@@ -150,7 +152,10 @@ export function startTenantRenewal(options: TenantRenewalOptions = {}) {
           // An expired receipt advances only the control revision. It never
           // opens data access, even briefly, before the fresh follow-up succeeds.
           if (reply.expiresAt <= Date.now()) suspendTenantLease(owner);
-          acceptTenantRenewal(owner, expected.revision, reply);
+          // A restart re-entry (renewTenant -> reenteredLease) already adopted the new context/tabId.
+          if (reply.tabId === expected.tabId && reply.context === expected.context) {
+            acceptTenantRenewal(owner, expected.revision, reply);
+          }
           attempt = undefined;
           if (tenantLeaseActive(owner)) {
             failures = 0;

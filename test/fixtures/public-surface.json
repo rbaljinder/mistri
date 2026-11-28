@@ -2864,6 +2864,7 @@
         "app: views.*[kind=list].split.row.primary",
         "app: views.*[kind=list].split.row.properties",
         "app: views.*[kind=list].suggest",
+        "app: views.*[kind=list].tabCounts",
         "app: views.*[kind=list].tabs",
         "app: views.*[kind=list].tabs[].empty",
         "app: views.*[kind=list].tabs[].empty.action",

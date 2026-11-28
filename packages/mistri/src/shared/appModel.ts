@@ -133,6 +133,8 @@ export interface AppListView {
   /** The menu's count (ui.shell.counts): true counts this list, false never does; absent, the rule
       decides (shared/menuCounts.ts). */
   count?: boolean;
+  /** Whether the list's tab strip counts each tab and saved view. Off by default. */
+  tabCounts?: boolean;
   /**
    * Columns offered as quick filters above the list, in order. Absent means
    * the client derives them — enum-vocabulary columns and boolean flags.

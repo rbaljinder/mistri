@@ -37,7 +37,8 @@
  * tenant App the column that names each tenant table's owner, which routes a
  * change to its tenant's subscribers alone (tenantLive.ts binds those).
  */
-import type { Adapter } from '@mistriwork/engine/adapters/adapter.js';
+import { Refusal, type Adapter } from '@mistriwork/engine/adapters/adapter.js';
+import { isPoolBusy } from '@mistriwork/engine/adapters/poolMetrics.js';
 import { bareTable, bindLiveChanges, type LiveBinding } from '../../adapters/live/liveChange.js';
 import { wakeListenUrl } from '../../adapters/events/postgresCommandEventWake.js';
 import { postgresPoolDefaults } from '@mistriwork/engine/adapters/postgresPool.js';
@@ -48,7 +49,7 @@ import type { Registry } from '@mistriwork/engine/server/connections.js';
 import type { AppHost } from '../app/apps.js';
 import { appSourceConnections } from '../app/appRuntimeResources.js';
 import { appEntrypoint } from '../app/appEntrypoint.js';
-import { liveHubOf, type LiveHub } from './liveHub.js';
+import { liveFault, liveHubOf, type LiveHub } from './liveHub.js';
 import { liveStoreOf } from './liveStore.js';
 
 let enabled = true;
@@ -102,7 +103,13 @@ function readyOf(adapter: Adapter, now = Date.now()): Promise<boolean> {
     timer = setTimeout(() => resolve('late'), ASK_MS);
     timer.unref?.();
   });
-  kept.asking = Promise.race([store.ready().catch(() => 'late' as const), late]).then((answer) => {
+  kept.asking = Promise.race([
+    store.ready().catch((error: unknown) => {
+      liveFault('ready', error);
+      return 'late' as const;
+    }),
+    late,
+  ]).then((answer) => {
     clearTimeout(timer);
     kept.asking = undefined;
     kept.at = Date.now();
@@ -334,6 +341,35 @@ export function liveStartupLines(registry: Registry, apps: readonly AppDef[]): s
 /** Why a subscriber has no hub on a connection: live sync is off there, or its setup did not finish in time. */
 type HubAnswer = { readonly hub: LiveHub } | { readonly off: true } | { readonly late: true };
 
+const TRANSIENT_HUB_CODES = new Set([
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'EPIPE',
+  'EAI_AGAIN',
+  '53300',
+  '57P01',
+  '57P02',
+  '57P03',
+]);
+
+/* Only a transient reachability or busyness fault asks the client to retry in 5 s (503). An unsupported database,
+   a refusal or a broken store configuration will not heal on its own — log why and answer live-off (204). */
+function isTransientHubError(error: unknown): boolean {
+  if (isPoolBusy(error)) return true;
+  if (!(error instanceof Error)) return false;
+  if (error instanceof Refusal) return false;
+  const { code, errcode } = error as { code?: unknown; errcode?: unknown };
+  if (typeof code === 'string' && (TRANSIENT_HUB_CODES.has(code) || code.startsWith('08'))) return true;
+  // node:sqlite SQLITE_BUSY (5) / SQLITE_LOCKED (6)
+  if (code === 'ERR_SQLITE_ERROR' && (errcode === 5 || errcode === 6 || /database is (?:locked|busy)/i.test(error.message))) return true;
+  return /^(?:Connection terminated|Client has encountered a connection error|timeout exceeded when trying to connect)/i.test(
+    error.message,
+  );
+}
+
 /**
  * The hub of a connection whose store attests, for a subscriber: the one
  * place a request waits on live sync's setup, and never longer than HUB_MS.
@@ -351,7 +387,10 @@ export async function connectionHub(registry: Registry, connection: string): Pro
     if (!adapter || !(await readyOf(adapter))) return { off: true };
     const hub = await hubOf(registry, connection, adapter);
     return hub ? { hub } : { off: true };
-  })().catch((): HubAnswer => ({ late: true }));
+  })().catch((error: unknown): HubAnswer => {
+    liveFault(`hub (${connection})`, error);
+    return isTransientHubError(error) ? { late: true } : { off: true };
+  });
   try {
     return await Promise.race([made, late]);
   } finally {

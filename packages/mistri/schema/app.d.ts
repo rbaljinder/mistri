@@ -1737,6 +1737,9 @@ export interface AppListView<Table extends string = string, Column extends strin
   /** With `ui.shell.counts`: true counts this list in the menu, false never does. Absent, the list is counted where
       its condition is work: its machine's unfinished states, a date at or before today, or the reader (`me`). */
   count?: boolean;
+  /** Whether the list's tab strip shows a count badge on each tab and saved view. Off by default; set true to count
+      every tab on open (`/api/counts`). */
+  tabCounts?: boolean;
   /** false draws the list without its title (it stays for a screen reader), where the room above already says where the reader is. */
   heading?: false;
   /** Shown when the list as it opens (its first tab) has no rows; a tab says its own with its `empty`, and a search or

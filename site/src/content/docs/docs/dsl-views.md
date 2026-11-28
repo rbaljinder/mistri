@@ -1183,6 +1183,12 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=list].summary[].width` | `"full"` · `"two-thirds"` · `"half"` · `"third"` | Preview |  One of `full`, `half`, `third`, `two-thirds`. Used in `examples/apps/tick/app.ts`. |
 | `views.*[kind=list].summary[].windows` | array | Preview | The section's own time windows, in the query grammar's words ("last 7 days"): the reader picks this section's period in its heading, apart from the dashboard's window, and the first is where it starts. Needs "over". Named in the address by the section's title: ?period.lines-moved-by-day=last-7-days. Used in `examples/apps/lintel/dashboards.ts`. |
 
+## `views.*[kind=list].tabCounts`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `views.*[kind=list].tabCounts` | boolean | Stable | Whether the list's tab strip shows a count badge on each tab and saved view. Off by default; set true to count every tab on open. Default `false`. |
+
 ## `views.*[kind=list].tabs`
 
 | Key | Type | Status | What it does |

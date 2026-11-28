@@ -233,6 +233,7 @@ export const LIST_VIEW_KEYS = [
   'heading',
   'roles',
   'count',
+  'tabCounts',
 ] as const;
 export const DASHBOARD_VIEW_KEYS = [
   'kind',
@@ -1094,6 +1095,7 @@ function parseListView(v: Record<string, unknown>, at: string, data: ParsedData)
     ...(keys ? { keys } : {}),
     ...(v.heading === false ? { heading: false as const } : {}),
     ...(countFlag(v.count, at) === undefined ? {} : { count: countFlag(v.count, at) }),
+    ...(tabCountsFlag(v.tabCounts, at) === undefined ? {} : { tabCounts: tabCountsFlag(v.tabCounts, at) }),
   };
 }
 
@@ -1101,6 +1103,13 @@ function parseListView(v: Record<string, unknown>, at: string, data: ParsedData)
 function countFlag(value: unknown, at: string): boolean | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== 'boolean') throw new Error(`${at}: "count" is true or false: whether the menu counts this list.`);
+  return value;
+}
+
+/* A list's say on its tab badges: off by default; true counts each tab and saved view. */
+function tabCountsFlag(value: unknown, at: string): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'boolean') throw new Error(`${at}: "tabCounts" is true or false: whether the tab strip counts each tab.`);
   return value;
 }
 
