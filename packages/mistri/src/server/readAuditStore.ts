@@ -18,7 +18,7 @@ import type { AuditedAccess, ReadAuditSink } from './readAudit.js';
 /** What a database (or a tenant's facade over one) answers for the read audit. */
 interface ReadAuditStore {
   readAuditReady(): Promise<boolean>;
-  appendReadAudit(row: ReadAuditRow): Promise<void>;
+  appendReadAudit(row: ReadAuditRow, delivery?: 'sync' | 'outbox'): Promise<void>;
   readReadAudit(query: ReadAuditQuery): Promise<StoredReadAudit[]>;
 }
 
@@ -51,7 +51,10 @@ export function withReadAuditSink<T extends AuditedAccess>(
   if (!access.audited?.size) return access;
   return {
     ...access,
-    readAudit: { ...sink, append: (row) => readAuditStoreOf(source, `connection "${connection}"`).appendReadAudit(row) },
+    readAudit: {
+      ...sink,
+      append: (row, _connection, delivery) => readAuditStoreOf(source, `connection "${connection}"`).appendReadAudit(row, delivery),
+    },
   };
 }
 
@@ -66,7 +69,8 @@ export function withReadAuditSinkPer<T extends AuditedAccess>(
     ...access,
     readAudit: {
       ...sink,
-      append: async (row, connection) => readAuditStoreOf(await sourceOf(connection), `connection "${connection}"`).appendReadAudit(row),
+      append: async (row, connection, delivery) =>
+        readAuditStoreOf(await sourceOf(connection), `connection "${connection}"`).appendReadAudit(row, delivery),
     },
   };
 }
@@ -74,7 +78,7 @@ export function withReadAuditSinkPer<T extends AuditedAccess>(
 /** The resources whose reads an App audits. */
 export const auditedResources = (app: Pick<AppDef, 'resources'>): string[] =>
   Object.entries(app.resources ?? {})
-    .filter(([, resource]) => resource.audit?.reads === true)
+    .filter(([, resource]) => resource.audit?.reads !== undefined)
     .map(([name]) => name);
 
 const ensured = new WeakMap<Registry, WeakSet<AppDef>>();

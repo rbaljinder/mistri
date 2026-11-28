@@ -45,7 +45,7 @@ const SEEDED = [
 
 for (const engine of ENGINES)
   test(
-    `${engine}: a version 1 read audit with rows upgrades in place to version 4, every row kept, and a start accepts it`,
+    `${engine}: a version 1 read audit with rows upgrades in place to version 5, every row kept, and a start accepts it`,
     { skip: engine === 'postgres' ? liveSkip('postgres', LIVE) : false },
     async () => {
       const { log, meta } = names(engine);
@@ -63,7 +63,7 @@ for (const engine of ENGINES)
             );
           const [status] = await storeStatuses(db, layouts);
           assert.equal(status.found, 1);
-          assert.deepEqual(status.pending, [1, 2, 3]);
+          assert.deepEqual(status.pending, [1, 2, 3, 4]);
         });
         // A start refuses version 1 and says how to bring it forward; it never upgrades it itself.
         await assert.rejects(attest(engine, where.url), /migrate stores up/);
@@ -76,11 +76,12 @@ for (const engine of ENGINES)
             ['read-audit', 1, 2],
             ['read-audit', 2, 3],
             ['read-audit', 3, 4],
+            ['read-audit', 4, 5],
           ],
         );
-        assert.deepEqual(await attest(engine, where.url), { version: 4, provisioned: false });
+        assert.deepEqual(await attest(engine, where.url), { version: 5, provisioned: false });
 
-        // The same layout a fresh version 4 store has, so the attestation is of one thing either way.
+        // The same layout a fresh version 5 store has, so the attestation is of one thing either way.
         await PROVISION['read-audit'][engine]!(fresh.url);
         assert.deepEqual(await describeUrl(where.url), await describeUrl(fresh.url));
 
@@ -105,7 +106,7 @@ for (const engine of ENGINES)
           );
           assert.deepEqual(
             (await db.all<{ version: number }>(`SELECT version FROM ${meta}`)).map((row) => Number(row.version)),
-            [4],
+            [5],
           );
           // Version 2 takes a command's read, and pairs the route with the command's id both ways.
           await db.run(
@@ -122,9 +123,9 @@ for (const engine of ENGINES)
                 ['2026-01-02T00:00:00.000Z', route, command],
               ),
             );
-          // Still append-only after the rebuild.
-          if (engine === 'sqlite') await assert.rejects(db.run(`DELETE FROM ${log}`), /append-only/);
-          else await db.run(`DELETE FROM ${log}`);
+          // Still append-only after the rebuild on both engines.
+          await assert.rejects(db.run(`DELETE FROM ${log}`), /append-only/);
+          await assert.rejects(db.run(`UPDATE ${log} SET actor = 'other'`), /append-only/);
           assert.equal((await db.all(`SELECT id FROM ${log}`)).length, SEEDED.length + 1);
           assert.ok(storeIsCurrent((await storeStatuses(db, layouts))[0]));
         });
@@ -139,7 +140,7 @@ for (const engine of ENGINES)
 
 for (const engine of ENGINES)
   test(
-    `${engine}: a version 2 read audit upgrades to version 4, its command reads kept, and takes a reader's roles, membership and token scope`,
+    `${engine}: a version 2 read audit upgrades to version 5, its command reads kept, and takes a reader's roles, membership and token scope`,
     { skip: engine === 'postgres' ? liveSkip('postgres', LIVE) : false },
     async () => {
       const { log, meta } = names(engine);
@@ -161,9 +162,10 @@ for (const engine of ENGINES)
           [
             ['read-audit', 2, 3],
             ['read-audit', 3, 4],
+            ['read-audit', 4, 5],
           ],
         );
-        assert.deepEqual(await attest(engine, where.url), { version: 4, provisioned: false });
+        assert.deepEqual(await attest(engine, where.url), { version: 5, provisioned: false });
         await withDb(where.url, async (db) => {
           await db.run(
             `INSERT INTO ${log} (at, app, tenant, actor, resource, route, record_key, roles_json, membership, scope) VALUES (?, 'ledger', 't1', 'a1', 'patients', 'page', '7', '["front-desk"]', 'm1', 'clinic:2')`,
@@ -186,11 +188,54 @@ for (const engine of ENGINES)
           );
           assert.deepEqual(
             (await db.all<{ version: number }>(`SELECT version FROM ${meta}`)).map((row) => Number(row.version)),
-            [4],
+            [5],
           );
         });
       } finally {
         await where.drop();
+      }
+    },
+  );
+
+for (const engine of ENGINES)
+  test(
+    `${engine}: a version 4 read audit upgrades in place to version 5 with gated retention pruning`,
+    { skip: engine === 'postgres' ? liveSkip('postgres', LIVE) : false },
+    async () => {
+      const { log, meta } = names(engine);
+      const where = await scratch(engine, 'audit_up4'),
+        fresh = await scratch(engine, 'audit_fresh4');
+      try {
+        const v4 = fixtureFiles('read-audit', engine).find((file) => file.version === 4)!;
+        await applyFixture(engine, where.url, readFileSync(v4.path, 'utf8'));
+        await withDb(where.url, (db) =>
+          db.run(
+            `INSERT INTO ${log} (at, app, tenant, actor, resource, route, record_key) VALUES (?, 'ledger', 't1', 'a1', 'patients', 'page', '7')`,
+            ['2026-01-01T00:00:00.000Z'],
+          ),
+        );
+        await assert.rejects(attest(engine, where.url), /migrate stores up/);
+        const done = await withDb(where.url, (db) => upgradeStores(db, where.url, layouts));
+        assert.deepEqual(done.failed, []);
+        assert.deepEqual(
+          done.applied.map((each) => [each.id, each.from, each.to]),
+          [['read-audit', 4, 5]],
+        );
+        assert.deepEqual(await attest(engine, where.url), { version: 5, provisioned: false });
+        await PROVISION['read-audit'][engine]!(fresh.url);
+        assert.deepEqual(await describeUrl(where.url), await describeUrl(fresh.url));
+        await withDb(where.url, async (db) => {
+          await assert.rejects(db.run(`DELETE FROM ${log}`), /append-only/);
+          await assert.rejects(db.run(`UPDATE ${log} SET actor = 'other'`), /append-only/);
+          assert.equal((await db.all(`SELECT id FROM ${log}`)).length, 1);
+          assert.deepEqual(
+            (await db.all<{ version: number }>(`SELECT version FROM ${meta}`)).map((row) => Number(row.version)),
+            [5],
+          );
+        });
+      } finally {
+        await where.drop();
+        await fresh.drop();
       }
     },
   );

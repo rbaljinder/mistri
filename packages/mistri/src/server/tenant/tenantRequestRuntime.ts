@@ -80,7 +80,7 @@ export interface TenantRequestScope {
   /** Run concurrent pre-transaction reads on one shared read snapshot (`TenantReadSource.together`). */
   together<R>(work: () => Promise<R>): Promise<R>;
   /** A command's read of an audited resource, written through the writer outside any transaction (tenantReadAudit.ts). */
-  appendReadAudit(row: ReadAuditRow): Promise<void>;
+  appendReadAudit(row: ReadAuditRow, delivery?: 'sync' | 'outbox'): Promise<void>;
   /** The tenant's shared profile columns (`auth.tenancy.shared`), read once for this request before its row scope:
    * what a handler's `tenant`, `tenant.<column>` and the person's zone read. Empty where the App shares none. */
   readonly tenant: Readonly<Record<string, TenantValue>>;
@@ -532,9 +532,9 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
               active();
               return reader.together(admitted, work);
             },
-            appendReadAudit: (row) => {
+            appendReadAudit: (row, delivery) => {
               active();
-              return writer.appendReadAudit(row);
+              return writer.appendReadAudit(row, delivery);
             },
             tenant: profile,
             members: async (accountIds) => {

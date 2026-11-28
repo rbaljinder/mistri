@@ -330,7 +330,9 @@ export function createTenantDeployment<Request>(options: TenantDeploymentOptions
     };
     /* An audited read's row goes through the writer, the tenant's fenced source: the reader is a snapshot and cannot write.
        An App that audits nothing hands its owners no sink at all. */
-    const readAudit = auditsReads(requests.app) ? { readAudit: (row: ReadAuditRow) => writer.appendReadAudit(row) } : {};
+    const readAudit = auditsReads(requests.app)
+      ? { readAudit: (row: ReadAuditRow, delivery?: 'sync' | 'outbox') => writer.appendReadAudit(row, delivery) }
+      : {};
     Object.assign(readOptions, readAudit);
     const reads = bindTenantReadRuntime(readOptions as unknown as TenantReadRuntimeOptions<Request>);
     /* The profile's columns no generic platform write reaches: its identity and

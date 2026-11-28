@@ -18,24 +18,34 @@
 import { DURATION_WORDS, parseDuration } from '@mistriwork/engine/shared/duration.js';
 import { isRecord } from '@mistriwork/engine/shared/model.js';
 
-const RETENTION_WINDOWS = ['history', 'commands', 'attempts'] as const;
+const RETENTION_WINDOWS = ['history', 'commands', 'attempts', 'reads'] as const;
 type RetentionWindow = (typeof RETENTION_WINDOWS)[number];
-/** A duration (`'30 days'`), or `'forever'`. */
+/** A duration (`'30 days'`, `'6 years'`), or `'forever'`. */
 type RetentionSpan = string;
 /** As the App declares it: the windows it names. */
 export type AppRetention = Readonly<Partial<Record<RetentionWindow, RetentionSpan>>>;
 
 const FOREVER = 'forever';
-/** What a window is when the App does not name it. */
+const YEAR_MS = 365 * 86_400_000;
+/** What a window is when the App does not name it. `reads` defaults to `'forever'` so existing read audits are never pruned unless declared. */
 const RETENTION_DEFAULTS: Readonly<Record<RetentionWindow, RetentionSpan>> = Object.freeze({
   history: '730 days',
   commands: '730 days',
   attempts: '30 days',
+  reads: FOREVER,
 });
+
+function parseRetentionDuration(value: unknown): number | undefined {
+  const base = parseDuration(value);
+  if (base !== undefined) return base;
+  const years = typeof value === 'string' ? /^\s*(\d{1,9})\s+years?\s*$/.exec(value) : null;
+  return years ? Number(years[1]) * YEAR_MS : undefined;
+}
 
 /** A declared `retention`, checked: the windows it names, each a duration above zero or `'forever'`. */
 export function parseAppRetention(raw: unknown, where: string): AppRetention {
-  if (!isRecord(raw)) throw new Error(`${where} is an object naming history, commands and attempts, like { attempts: '14 days' }.`);
+  if (!isRecord(raw))
+    throw new Error(`${where} is an object naming history, commands, attempts and reads, like { attempts: '14 days', reads: '6 years' }.`);
   const out: Partial<Record<RetentionWindow, RetentionSpan>> = {};
   for (const key of Object.keys(raw)) {
     if (!(RETENTION_WINDOWS as readonly string[]).includes(key))
@@ -45,7 +55,8 @@ export function parseAppRetention(raw: unknown, where: string): AppRetention {
     if (!Object.hasOwn(raw, key)) continue;
     const value = raw[key];
     const text = typeof value === 'string' ? value.trim() : value;
-    if (text !== FOREVER && !parseDuration(text)) throw new Error(`${where} ${key} is ${DURATION_WORDS}, above zero, or '${FOREVER}'.`);
+    if (text !== FOREVER && !parseRetentionDuration(text))
+      throw new Error(`${where} ${key} is ${DURATION_WORDS} (or years), above zero, or '${FOREVER}'.`);
     out[key] = text as RetentionSpan;
   }
   return Object.freeze(out);
@@ -55,7 +66,7 @@ export function parseAppRetention(raw: unknown, where: string): AppRetention {
 export function retentionMs(declared?: AppRetention): Readonly<Record<RetentionWindow, number | null>> {
   const ms = (key: RetentionWindow): number | null => {
     const span = declared?.[key] ?? RETENTION_DEFAULTS[key];
-    return span === FOREVER ? null : parseDuration(span)!;
+    return span === FOREVER ? null : parseRetentionDuration(span)!;
   };
-  return Object.freeze({ history: ms('history'), commands: ms('commands'), attempts: ms('attempts') });
+  return Object.freeze({ history: ms('history'), commands: ms('commands'), attempts: ms('attempts'), reads: ms('reads') });
 }

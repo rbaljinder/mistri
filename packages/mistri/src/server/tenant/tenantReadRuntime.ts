@@ -159,7 +159,7 @@ export interface TenantReadRuntimeOptions<Request> {
   /** The deployment's kept admissions (tenantAdmissionCache.ts). */
   readonly admissions?: AdmissionCache;
   /** Where an audited resource's read is written (tenantReadAudit.ts): the deployment's writer, never this source. */
-  readonly readAudit?: (row: ReadAuditRow) => Promise<void>;
+  readonly readAudit?: (row: ReadAuditRow, delivery?: 'sync' | 'outbox') => Promise<void>;
 }
 
 /** A callback's failure that is the request's and not the context's: the

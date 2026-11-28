@@ -289,25 +289,31 @@ redrive is never forgotten, however old.
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `retention` | object | Stable | How long the runtime keeps what it writes about the App as it runs; a daily job forgets what is older. history: who changed which record (default 730 days). commands: the command journal's receipts, audit and events (default 730 days). attempts: the finished tries of jobs and webhook deliveries; one still pending or waiting for a redrive is never forgotten (default 30 days). Each is a duration, or 'forever' to keep it all. |
+| `retention` | object | Stable | How long the runtime keeps what it writes about the App as it runs; a daily job forgets what is older. history: who changed which record (default 730 days). commands: the command journal's receipts, audit and events (default 730 days). attempts: the finished tries of jobs and webhook deliveries; one still pending or waiting for a redrive is never forgotten (default 30 days). reads: read audit entries for resources with audit.reads (default 'forever'; e.g. '6 years'). Each is a duration, or 'forever' to keep it all. |
 
 ## `retention.attempts`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `retention.attempts` | string | Stable | A duration above zero ('30 days', '12 weeks') or 'forever'. |
+| `retention.attempts` | string | Stable | A duration above zero ('30 days', '12 weeks', '6 years') or 'forever'. |
 
 ## `retention.commands`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `retention.commands` | string | Stable | A duration above zero ('30 days', '12 weeks') or 'forever'. Used in `examples/apps/lintel/app.ts`. |
+| `retention.commands` | string | Stable | A duration above zero ('30 days', '12 weeks', '6 years') or 'forever'. Used in `examples/apps/lintel/app.ts`. |
 
 ## `retention.history`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `retention.history` | string | Stable | A duration above zero ('30 days', '12 weeks') or 'forever'. |
+| `retention.history` | string | Stable | A duration above zero ('30 days', '12 weeks', '6 years') or 'forever'. |
+
+## `retention.reads`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `retention.reads` | string | Stable | A duration above zero ('30 days', '12 weeks', '6 years') or 'forever'. Used in `examples/apps/lintel/dashboards.ts`. |
 
 ## `shortName`
 

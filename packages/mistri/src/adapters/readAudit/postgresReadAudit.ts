@@ -18,6 +18,7 @@ import {
   READ_AUDIT_AT_INDEX,
   READ_AUDIT_LIMITS,
   READ_AUDIT_PREFIX,
+  READ_AUDIT_PRUNE_SETTING,
   READ_AUDIT_RECORD_INDEX,
   READ_AUDIT_TABLES,
   READ_AUDIT_VERSION,
@@ -37,6 +38,13 @@ const { meta, row: log } = postgresRuntimeNames(READ_AUDIT_TABLES);
 const q = (name: string) => runtimeTable('postgres', name);
 const layoutMessage = async (client: PgQuery) =>
   layoutRefusal('The read audit store', await postgresLayoutVersion(client, q(meta)), READ_AUDIT_VERSION);
+
+const APPEND_ONLY_FUNCTION = `CREATE OR REPLACE FUNCTION ${runtimeSchema('postgres')}.read_audit_append_only() RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog AS $body$
+BEGIN
+  IF TG_OP = 'DELETE' AND current_setting('${READ_AUDIT_PRUNE_SETTING}', true) = 'on' THEN RETURN OLD; END IF;
+  RAISE EXCEPTION 'The read audit is append-only; retention goes through prune.';
+END $body$`;
+const APPEND_ONLY_TRIGGER = `CREATE TRIGGER "${log}_append_only" BEFORE DELETE OR UPDATE ON ${q(log)} FOR EACH ROW EXECUTE FUNCTION ${runtimeSchema('postgres')}.read_audit_append_only()`;
 
 const routes = READ_ROUTES.map((route) => `'${route}'`).join(', ');
 const definitions: readonly string[] = [
@@ -65,8 +73,8 @@ const definitions: readonly string[] = [
 )`,
   `CREATE INDEX "${READ_AUDIT_RECORD_INDEX}" ON ${q(log)} (resource, record_key, id)`,
   `CREATE INDEX "${READ_AUDIT_AT_INDEX}" ON ${q(log)} (at)`,
-  `CREATE RULE "${log}_no_update" AS ON UPDATE TO ${q(log)} DO INSTEAD NOTHING`,
-  `CREATE RULE "${log}_no_delete" AS ON DELETE TO ${q(log)} DO INSTEAD NOTHING`,
+  APPEND_ONLY_FUNCTION,
+  APPEND_ONLY_TRIGGER,
 ];
 
 const AT_ISO = `to_char(at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
@@ -89,6 +97,7 @@ const table = (
   columns: PostgresRelationDescription['columns'],
   constraints: string[],
   indexes: string[],
+  triggers = 0,
   rules = 0,
 ): PostgresRelationDescription => ({
   schema: runtimeSchema('postgres'),
@@ -98,7 +107,7 @@ const table = (
   columns,
   constraints: [...constraints].sort(byCodeUnit),
   indexes: [...indexes].sort(byCodeUnit),
-  triggers: 0,
+  triggers,
   rules,
   policies: 0,
 });
@@ -155,7 +164,8 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
       `CREATE INDEX ${READ_AUDIT_RECORD_INDEX} ON ${runtimeSchema('postgres')}.${log} USING btree (resource, record_key, id)`,
       `CREATE UNIQUE INDEX ${log}_pkey ON ${runtimeSchema('postgres')}.${log} USING btree (id)`,
     ],
-    2,
+    1,
+    0,
   ),
 ];
 
@@ -193,6 +203,17 @@ export function postgresReadAuditUpgradeFrom3(): readonly string[] {
   return [
     `ALTER TABLE ${q(log)} ADD COLUMN scope text COLLATE "C" CHECK (octet_length(scope) <= ${READ_AUDIT_LIMITS.scope})`,
     ...nextVersion(4),
+  ];
+}
+
+/** Version 4 to 5: replaces the DO INSTEAD NOTHING rules with the retention-gated append-only trigger. */
+export function postgresReadAuditUpgradeFrom4(): readonly string[] {
+  return [
+    `DROP RULE "${log}_no_update" ON ${q(log)}`,
+    `DROP RULE "${log}_no_delete" ON ${q(log)}`,
+    APPEND_ONLY_FUNCTION,
+    APPEND_ONLY_TRIGGER,
+    ...nextVersion(5),
   ];
 }
 

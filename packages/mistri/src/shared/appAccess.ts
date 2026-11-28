@@ -11,8 +11,10 @@ import {
   homeSourceOf,
   isTenantApp,
   platformSourceNames,
+  readAuditPolicyOf,
   resourceCeiling,
   type AppDef,
+  type ReadAuditPolicy,
   type AppRoleFieldAccess,
   type AppNavNode,
   type AppRoleGrant,
@@ -53,12 +55,17 @@ export function resolveAppAccess(app: AppDef, schema: DatabaseSchema, roles: rea
  */
 function withAudited(app: AppDef, schema: DatabaseSchema, access: ResolvedAccess): ResolvedAccess {
   const audited = new Map<string, string>();
+  const auditPolicies = new Map<string, ReadAuditPolicy>();
   for (const [name, resource] of Object.entries(app.resources ?? {})) {
-    if (!resource.audit?.reads) continue;
+    const policy = readAuditPolicyOf(resource.audit?.reads);
+    if (!policy) continue;
     const table = findTable(schema, name) ?? tableNamed(schema, name);
-    if (table && access.readable.has(table.id)) audited.set(table.id, name);
+    if (table && access.readable.has(table.id)) {
+      audited.set(table.id, name);
+      auditPolicies.set(name, policy);
+    }
   }
-  return audited.size ? { ...access, audited } : access;
+  return audited.size ? { ...access, audited, auditPolicies } : access;
 }
 
 interface ResolvedAccess {
@@ -84,6 +91,8 @@ interface ResolvedAccess {
   internal?: ReadonlyMap<string, ReadonlySet<string>>;
   /** Of `readable`, the tables whose reads are written to the read audit (server/readAudit.ts). */
   audited?: ReadonlyMap<string, string>;
+  /** Per-resource read-audit coalescing and delivery policy, keyed by logical resource name. */
+  auditPolicies?: ReadonlyMap<string, ReadAuditPolicy>;
   /** Of `readable`, the tables a visitor reads one record at a time by its key (`auth.public.byKey`,
       server/app/publicByKey.ts). Absent where none is. */
   byKey?: ReadonlySet<string>;

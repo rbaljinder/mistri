@@ -391,6 +391,7 @@ export async function startServing(
       await listenerClosed;
       clearTimeout(grace);
       await attempt(() => (server ? retireDevClient(server) : undefined));
+      await attempt(async () => (await import('../../adapters/readAudit/outbox.js')).closeAllReadAuditOutboxes());
       for (const host of serving.apps) await attempt(() => host.auth?.close());
       await attempt(() => registry.closeAll());
       await attempt(() => serving.diagnostics?.flush());

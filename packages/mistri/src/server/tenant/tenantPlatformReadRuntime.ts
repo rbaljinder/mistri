@@ -98,7 +98,7 @@ export interface PlatformReadRuntimeOptions<Request> {
   /** The deployment's kept admissions (tenantAdmissionCache.ts). */
   readonly admissions?: AdmissionCache;
   /** Where an audited resource's read is written (tenantReadAudit.ts). The platform reads across tenants: its rows carry no tenant. */
-  readonly readAudit?: (row: ReadAuditRow) => Promise<void>;
+  readonly readAudit?: (row: ReadAuditRow, delivery?: 'sync' | 'outbox') => Promise<void>;
 }
 
 /** Capture synchronous transfers immediately, asynchronous ones on native delivery. */

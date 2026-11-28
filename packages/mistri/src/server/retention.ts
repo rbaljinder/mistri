@@ -20,6 +20,7 @@ import '../adapters/history/recordHistory.js';
 import '../adapters/jobs/jobStoreSchema.js';
 import '../adapters/events/eventDeliverySchema.js';
 import '../adapters/commands/commandJournalSchema.js';
+import '../adapters/readAudit/readAudit.js';
 import { pruneAll, postgresPruneDb, prunes, sqlitePruneDb, type PruneOptions, type PruneRule } from '../adapters/retention/pruner.js';
 import { retentionMs, type AppRetention } from '../shared/appRetention.js';
 import type { StoreTarget } from './commands/appCommandEvents.js';
@@ -81,10 +82,10 @@ export function retentionJob(options: RetentionJobOptions): BuiltInJob {
   });
 }
 
-/** True when any window prunes: all three at 'forever' is the one declaration that asks for nothing. */
+/** True when any window prunes: every window at 'forever' is the one declaration that asks for nothing. */
 export function retentionPrunes(retention?: AppRetention): boolean {
   const windows = retentionMs(retention);
-  return windows.history !== null || windows.commands !== null || windows.attempts !== null;
+  return windows.history !== null || windows.commands !== null || windows.attempts !== null || windows.reads !== null;
 }
 
 /**

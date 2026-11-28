@@ -835,8 +835,9 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // Unreleased (Wave 4A/4B): multi-provider routing (`provider`, `fallbackModels` on assistant & agents),
     // live MCP server discovery (`mcpServers`, `assistantMcpServer`: `defaultAccess`, `allowTools`, ...),
     // and progressive-disclosure skills (`skills`, `assistantSkill`, agent `skills`: 19 entries; 5 new names): 1992/600.
-    // Unreleased: list view `tabCounts` opt-in (1 entry; 1 new name): 1993/601.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1993, names: 601 });
+    // Unreleased: list view `tabCounts` opt-in (1 entry; 1 new name), `retention.reads` and `audit.reads` options
+    // (`coalesce`, `delivery`: 3 entries; 2 new names): 1996/603.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1996, names: 603 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {
