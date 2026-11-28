@@ -309,6 +309,7 @@ const readGets = new Set([
   '/api/assistant/runs/stream',
   '/api/assistant/runs/trace',
   '/api/assistant/automations',
+  '/api/assistant/usage',
 ]);
 
 /** An allowlist makes new HTTP routes opt in to the policy review, not out. */

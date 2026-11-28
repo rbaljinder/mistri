@@ -84,4 +84,11 @@ export const say = defineMessages({
   mcpDiscoveredNone: 'No tools advertised',
   mcpDiscoverError: 'Discovery failed: {message}',
   skillProgressiveBadge: 'load_skill',
+  usageHeading: 'Usage & cost',
+  usageTokens: 'Tokens',
+  usageCacheHit: 'Cache hit',
+  usageCost: 'Est. cost',
+  usageCalls: 'Model calls',
+  usageCostSubCent: '< $0.001',
+  usageModelPill: '{provider} · {model} · {cost}',
 });

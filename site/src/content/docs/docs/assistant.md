@@ -59,15 +59,26 @@ made, and the person asks the assistant for it instead, where it becomes a propo
 | Key | Does | Default | Status |
 | --- | --- | --- | --- |
 | `instructions` | What the App is and what people ask it | none | Stable |
+| `roleInstructions` | Per-role prompt guidance (`{ [role]: string }`) merged only for people holding that role; never sent to the browser | none | Stable |
 | `roles` | Who is offered it (needs `auth`) | everyone signed in | Stable |
 | `exclude` | Verbs it never proposes: `'resource.action'`, `'resource.new'` | none | Stable |
-| `tools`, `blocks` | Narrow its tools (`find`, `describe`, `query`, `show`, `run`) and blocks (`table`, `metric`, `metrics`, `chart`, `breakdown`, `funnel`, `board`, `timeline`, `record`, `callout`, `tabs`) | all | Stable |
+| `autoApproveCommands` | Low-risk business commands (`'command'` or `'resource.action'`) the assistant may run directly under the signed-in person's own grants and row policy instead of pausing for confirmation | none | Stable |
+| `tools`, `blocks` | Narrow its tools (`find`, `describe`, `query`, `show`, `run`) and blocks (`table`, `metric`, `metrics`, `chart`, `breakdown`, `funnel`, `board`, `timeline`, `gallery`, `calendar`, `record`, `callout`, `tabs`) | all | Stable |
+| `customBlocks` | Author-defined read-only generative UI blocks rendered by registered client components | none | Stable |
 | `placement` | `'panel'`; `'record'` to read the open record as context; `'page'` for a page of its own | `'panel'`, `'record'` | Stable |
 | `presentations`, `defaultPresentation` | Panel layout modes offered in the mode switcher (`'sidebar'`, `'floating'`, `'fullscreen'`) and the initial mode | all three; `'sidebar'` | Stable |
 | `starters` | One-line questions offered on an empty conversation; `{ text, views, records, roles }` offers one only in those views, on a record of those tables, or to people holding one of those roles; at most six in one place for one person | none | Stable |
 | `limits` | Tokens per answer (`tokensPerTurn`), per person per day, per App per day; `steps`, the rounds of tool calls one answer may take before it is written (1 to 32; a refused call's round is not counted) | 200,000 per person per day; 8 steps | Stable |
-| `model`, `effort`, `effortPicker` | Model id, default reasoning effort (`'low'`, `'medium'`, `'high'`), and optional per-turn effort selector in the composer | `claude-sonnet-5-5` | Stable |
+| `provider`, `model`, `fallbackModels` | Model provider (`'anthropic'`, `'openai'`, `'gemini'`, `'openai-compatible'`), model id, and ordered fallback chain (bare model names or `'provider:model'`) | `claude-sonnet-5-5` | Stable |
+| `effort`, `effortPicker` | Default reasoning effort (`'low'`, `'medium'`, `'high'`) and optional per-turn effort selector in the composer | provider default | Stable |
 | `reasoning` | How model thinking traces surface in the conversation: `'collapsed'`, `'expanded'`, or `'hidden'` | `'collapsed'` | Stable |
+| `agents` | Named specialist subagents (with per-agent `instructions`, `tools`, `blocks`, `provider`, `model`, `fallbackModels`, `skills`, `roles`, and `delegate`) | none | Stable |
+| `memory` | Persistent scoped notes (`scopes: ['person', 'app']`, `sharedRoles`, `maxItems`) managed via `remember` / `forget` and the Memory drawer | off | Stable |
+| `knowledge` | Authority-scoped resource search sources (`resource`, `fields`, `where`, `roles`) returning inline numbered `[1]` citations | none | Stable |
+| `backgroundRuns` | Durable async runs (`maxConcurrent`, `maxSteps`, `presets`, cron `schedules`, record-change `triggers`) monitored in the Run Monitor with resumable SSE | off | Stable |
+| `evals` | Declarative eval cases graded live under the viewer's authority in the Run Monitor's Evals tab | none | Stable |
+| `externalTools`, `mcpServers`, `webhooks` | SSRF-protected outbound HTTP/MCP tools, live JSON-RPC 2.0 MCP `tools/list` discovery, and HMAC-SHA256 signed inbound webhooks | none | Stable |
+| `skills` | Progressive-disclosure instruction modules loaded on demand through `load_skill` | none | Stable |
 
 A starter about the open record belongs on that record only:
 
@@ -95,6 +106,23 @@ not open: the panel says it was refused and is about nothing. `offered` is false
 person is not offered the assistant. `about` needs `'record'` in `placement`; `mistri check` warns
 (`component-assistant`) where it is missing, or where the App has no assistant.
 
+To attach lightweight, read-only page state (such as active filters or a selected cohort) as a dismissible chip above the composer, call `useAssistantContext` from `@mistriwork/mistri/ui`:
+
+```tsx
+useAssistantContext({
+  id: 'pipeline-filter',
+  label: 'Q3 Enterprise · 4 deals',
+  summary: 'Filtered to stage=proposal, segment=enterprise',
+});
+```
+
+## Policy, routing, and automation
+
+- **Per-role instructions (`roleInstructions`):** Tailor tone and focus by role (`{ rep: 'Prioritize next customer outreach.', manager: 'Highlight forecast risk and coaching opportunities.' }`). Only guidance matching the signed-in person's roles is merged into the prompt, and the map is never sent to the client.
+- **Opt-in low-risk command auto-execution (`autoApproveCommands`):** By default every write pauses for the person's confirmation. Listing specific low-risk business commands in `autoApproveCommands` (for example, `['deal.logCall']`) lets `run` execute them directly through the person's own `/api/commands/execute` path—still enforcing role grants, row policies, tenant leases, input validation, and the command journal audit trail—while all other writes remain proposals.
+- **Multi-provider routing & usage rollups:** Set `provider` (`'anthropic'`, `'openai'`, `'gemini'`, or `'openai-compatible'`), `model`, and an ordered `fallbackModels` list at the assistant or specialist-agent level. The Run Monitor summarizes token usage, prompt-cache hit rate, and estimated USD cost per provider and model via `GET /api/assistant/usage`.
+- **Memory, grounded citations, skills, MCP, and durable runs:** Enable `memory` for scoped notes, `knowledge` for verifiable `[1]` record citations, `skills` for progressive `load_skill` instructions, `mcpServers` / `externalTools` / `webhooks` for external bridges, `backgroundRuns` for durable async workflows with cron schedules and record triggers, and `evals` for in-App quality scorecards.
+
 ## What it knows of a record
 
 A resource's rollups and computed columns are columns to the assistant: it lists them, reads them with the record's own
@@ -103,7 +131,7 @@ in, from the column's display rule (money and its currency, kept in cents or not
 breakdown's measure, so a sum of dollars is not called cents. One a role's field grant hides is hidden from the
 assistant too.
 
-The model's words may hold a table; the panel draws it as a table.
+The model's words may hold a table; the panel draws it as a table. Built-in `show` blocks also include `gallery` (visual cards with safe-URL image filtering) and `calendar` (day-grouped chronological agendas), alongside tables, charts, funnels, boards, timelines, callouts, and tabs.
 
 The assistant is told the day, the time and the zone with each question (the App's `ui.timezone`, or the zone the person's tenant names), names records by the resource's `recordLabel`, and draws no block for a read that came back empty.
 When the model provider refuses a call, the person reads a plain sentence and the server's log names the status and the provider's error type; a spent credit balance is said there as such.

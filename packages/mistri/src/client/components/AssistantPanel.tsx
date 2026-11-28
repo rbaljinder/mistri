@@ -60,7 +60,6 @@ import {
   writeAllowed,
 } from '@mistriwork/kit/client/core.js';
 import { grantedActionIds, mayRunAny } from '@mistriwork/kit/client/actionGrants.js';
-import { sessionIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
 import { syncHash } from '@mistriwork/kit/client/url.js';
 import { pageBridge } from '@mistriwork/kit/client/uiBridge.js';
 import { assistantEntry } from '../publicAddress.js';
@@ -94,7 +93,7 @@ import {
   type ProposalOutcome,
   type StreamEvent,
 } from './assistantStream.js';
-import { CitationPill, CitationsCard, MemoryEventChip } from './AssistantCitations.js';
+import { CitationPill, CitationsCard, MemoryEventChip, PageContextChips, usePageContextChips } from './AssistantCitations.js';
 import { Button } from '@mistriwork/ui/Button.js';
 import { Resizable } from '@mistriwork/ui/Resizable.js';
 import { Tabs } from '@mistriwork/ui/Tabs.js';
@@ -104,7 +103,20 @@ import { AiReasoning } from '@mistriwork/ui/views/AiReasoning.js';
 import { Select } from '@mistriwork/ui/Select.js';
 import '@mistriwork/ui/styles/surfaces/views-ai.css';
 import { EvidenceItem } from './EvidenceList.js';
-import { assistantApi, assistantOwner, executeExternalProposal } from './assistantRequest.js';
+import {
+  ALL_PRESENTATIONS,
+  assistantApi,
+  assistantOwner,
+  clampPanelWidth,
+  executeExternalProposal,
+  PANEL_WIDTH_MAX,
+  PANEL_WIDTH_MIN,
+  readPanelWidth,
+  readPresentation,
+  writePanelWidth,
+  writePresentation,
+  type PanelPresentation,
+} from './assistantRequest.js';
 import type { AssistantHandoff } from './assistantDoor.js';
 import { ConversationList, DeleteConversation, RenameField, type ConversationSummary } from './ConversationList.js';
 import { DropItem, DropMenu } from '@mistriwork/ui/DropMenu.js';
@@ -125,6 +137,7 @@ const Dashboard = onDemand(() => import('./Dashboard.js'), 'Dashboard');
 const AssistantCustomBlock = onDemand(() => import('./sdk/AssistantCustomBlock.js'), 'AssistantCustomBlock');
 const AssistantMemoryDrawer = onDemand(() => import('./AssistantMemoryDrawer.js'), 'AssistantMemoryDrawer');
 const AssistantRunMonitor = onDemand(() => import('./AssistantRunMonitor.js'), 'AssistantRunMonitor');
+const AssistantRichBlocks = onDemand(() => import('./AssistantRichBlocks.js'), 'AssistantRichBlocks');
 
 type Summary = ConversationSummary;
 
@@ -255,7 +268,16 @@ function rowActionsOn(tableId: unknown): boolean {
 }
 
 const WIDE_SECTION_KINDS = new Set(['rows', 'board', 'funnel']);
-const CANVAS_CAPABLE_KINDS = new Set<AssistantBlock['kind']>(['section', 'metrics', 'timeline', 'tabs', 'custom', 'record']);
+const CANVAS_CAPABLE_KINDS = new Set<AssistantBlock['kind']>([
+  'section',
+  'metrics',
+  'timeline',
+  'gallery',
+  'calendar',
+  'tabs',
+  'custom',
+  'record',
+]);
 
 function blockTitle(block: AssistantBlock): string {
   if (block.kind === 'section') {
@@ -357,6 +379,8 @@ function Block({
       </Callout>
     );
   }
+  if (block.kind === 'gallery' || block.kind === 'calendar')
+    return <AssistantRichBlocks block={block} canvasAction={canvasAction} onFollow={onFollow} />;
   if (block.kind === 'timeline') {
     return (
       <section className="assistant-block assistant-timeline" aria-label={block.title || block.table}>
@@ -965,57 +989,6 @@ function ProposalCard({ proposal, outcome, live, onResolve, onFollow }: CardProp
   );
 }
 
-/* Panel presentation mode (sidebar, floating, fullscreen) and side-panel width are per-person preferences on this device. */
-type PanelPresentation = 'sidebar' | 'floating' | 'fullscreen';
-const ALL_PRESENTATIONS: readonly PanelPresentation[] = ['sidebar', 'floating', 'fullscreen'];
-const modeKey = (app: string) => `mistri.assistant.mode.${app}.${sessionIdentity().accountId ?? 'local'}`;
-const expandedKey = (app: string) => `mistri.assistant.expanded.${app}.${sessionIdentity().accountId ?? 'local'}`;
-const widthKey = (app: string) => `mistri.assistant.width.${app}.${sessionIdentity().accountId ?? 'local'}`;
-const PANEL_WIDTH_MIN = 384;
-const PANEL_WIDTH_MAX = 832;
-function panelCeiling(): number {
-  const vw = viewportSize().width;
-  return vw > 0 ? Math.max(PANEL_WIDTH_MIN, Math.min(PANEL_WIDTH_MAX, Math.floor(vw * 0.75))) : PANEL_WIDTH_MAX;
-}
-function clampPanelWidth(px: number): number {
-  return Math.round(Math.min(panelCeiling(), Math.max(PANEL_WIDTH_MIN, px)));
-}
-function readPresentation(app: string, allowed: readonly PanelPresentation[], fallback: PanelPresentation): PanelPresentation {
-  try {
-    const saved = window.localStorage.getItem(modeKey(app)) as PanelPresentation | null;
-    if (saved && allowed.includes(saved)) return saved;
-    if (window.localStorage.getItem(expandedKey(app)) === '1' && allowed.includes('fullscreen')) return 'fullscreen';
-  } catch {
-    /* Remembered where the browser lets it be; the panel works either way. */
-  }
-  return allowed.includes(fallback) ? fallback : (allowed[0] ?? 'sidebar');
-}
-function writePresentation(app: string, mode: PanelPresentation): void {
-  try {
-    window.localStorage.setItem(modeKey(app), mode);
-    if (mode === 'fullscreen') window.localStorage.setItem(expandedKey(app), '1');
-    else window.localStorage.removeItem(expandedKey(app));
-  } catch {
-    /* Remembered where the browser lets it be; the panel works either way. */
-  }
-}
-function readPanelWidth(app: string): number | null {
-  try {
-    const raw = Number(window.localStorage.getItem(widthKey(app)));
-    return Number.isFinite(raw) && raw > 0 ? clampPanelWidth(raw) : null;
-  } catch {
-    return null;
-  }
-}
-function writePanelWidth(app: string, width: number | null): void {
-  try {
-    if (width === null) window.localStorage.removeItem(widthKey(app));
-    else window.localStorage.setItem(widthKey(app), String(Math.round(width)));
-  } catch {
-    /* Remembered where the browser lets it be; the panel works either way. */
-  }
-}
-
 /** Whether the screen is a phone's, kept current as it turns or resizes. */
 function usePhone(): boolean {
   const [on, setOn] = useState(phone);
@@ -1149,6 +1122,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
     null,
   );
   const [withRecord, setWithRecord] = useState(true);
+  const pageCtx = usePageContextChips();
   const [renamingTitle, setRenamingTitle] = useState(false);
   const [deletingOpen, setDeletingOpen] = useState(false);
   const appPayload = activeApp() as AppPayloadApp | null;
@@ -1444,6 +1418,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
       request.edit = editing;
     }
     if (context && withRecord) request.context = { resource: context.resource, key: context.key };
+    if (pageCtx.active.length) request.pageContext = pageCtx.active.map(({ label, summary }) => ({ label, summary }));
     if (assistantConfig?.effortPicker) request.effort = effort;
     if (activeAgent) request.agent = activeAgent.id;
     setItems([...next, { type: 'person', text: said }]);
@@ -1922,6 +1897,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
               </button>
             </div>
           )}
+          {!listing && <PageContextChips entries={pageCtx.active} onDismiss={pageCtx.dismiss} />}
           {editing !== null && (
             <div className="assistant-context">
               <span>{say('editing')}</span>

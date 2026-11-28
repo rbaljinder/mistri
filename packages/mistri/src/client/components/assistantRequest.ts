@@ -5,8 +5,8 @@
  * tenant from it alone (server tenant/tenantAssistant.ts), so a conversation
  * is always the current customer's. Kept in the assistant's own chunk.
  */
-import { api } from '@mistriwork/kit/client/core.js';
-import { captureSessionIdentity, captureTenantLease } from '@mistriwork/kit/client/sessionIdentity.js';
+import { api, viewportSize } from '@mistriwork/kit/client/core.js';
+import { captureSessionIdentity, captureTenantLease, sessionIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
 import { TENANT_HTTP_HEADERS as names } from '../../shared/tenantContext.js';
 import { fetchServer } from '@mistriwork/kit/client/transport.js';
 import { shell } from '@mistriwork/kit/client/shellMode.js';
@@ -75,5 +75,56 @@ export async function executeExternalProposal(
     return { status: 'done', ...(res.output ? { detail: res.output.slice(0, 480) } : {}) };
   } catch (error) {
     return { status: 'failed', detail: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/* Panel presentation mode (sidebar, floating, fullscreen) and side-panel width are per-person preferences on this device. */
+export type PanelPresentation = 'sidebar' | 'floating' | 'fullscreen';
+export const ALL_PRESENTATIONS: readonly PanelPresentation[] = ['sidebar', 'floating', 'fullscreen'];
+const modeKey = (app: string) => `mistri.assistant.mode.${app}.${sessionIdentity().accountId ?? 'local'}`;
+const expandedKey = (app: string) => `mistri.assistant.expanded.${app}.${sessionIdentity().accountId ?? 'local'}`;
+const widthKey = (app: string) => `mistri.assistant.width.${app}.${sessionIdentity().accountId ?? 'local'}`;
+export const PANEL_WIDTH_MIN = 384;
+export const PANEL_WIDTH_MAX = 832;
+function panelCeiling(): number {
+  const vw = viewportSize().width;
+  return vw > 0 ? Math.max(PANEL_WIDTH_MIN, Math.min(PANEL_WIDTH_MAX, Math.floor(vw * 0.75))) : PANEL_WIDTH_MAX;
+}
+export function clampPanelWidth(px: number): number {
+  return Math.round(Math.min(panelCeiling(), Math.max(PANEL_WIDTH_MIN, px)));
+}
+export function readPresentation(app: string, allowed: readonly PanelPresentation[], fallback: PanelPresentation): PanelPresentation {
+  try {
+    const saved = window.localStorage.getItem(modeKey(app)) as PanelPresentation | null;
+    if (saved && allowed.includes(saved)) return saved;
+    if (window.localStorage.getItem(expandedKey(app)) === '1' && allowed.includes('fullscreen')) return 'fullscreen';
+  } catch {
+    /* Remembered where the browser lets it be; the panel works either way. */
+  }
+  return allowed.includes(fallback) ? fallback : (allowed[0] ?? 'sidebar');
+}
+export function writePresentation(app: string, mode: PanelPresentation): void {
+  try {
+    window.localStorage.setItem(modeKey(app), mode);
+    if (mode === 'fullscreen') window.localStorage.setItem(expandedKey(app), '1');
+    else window.localStorage.removeItem(expandedKey(app));
+  } catch {
+    /* Remembered where the browser lets it be; the panel works either way. */
+  }
+}
+export function readPanelWidth(app: string): number | null {
+  try {
+    const raw = Number(window.localStorage.getItem(widthKey(app)));
+    return Number.isFinite(raw) && raw > 0 ? clampPanelWidth(raw) : null;
+  } catch {
+    return null;
+  }
+}
+export function writePanelWidth(app: string, width: number | null): void {
+  try {
+    if (width === null) window.localStorage.removeItem(widthKey(app));
+    else window.localStorage.setItem(widthKey(app), String(Math.round(width)));
+  } catch {
+    /* Remembered where the browser lets it be; the panel works either way. */
   }
 }

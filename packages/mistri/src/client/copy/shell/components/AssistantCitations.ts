@@ -11,4 +11,5 @@ export const say = defineMessages({
   sources: { one: '{count} source', other: '{count} sources' },
   sourcesRegion: 'Cited sources',
   openSource: 'Open {title}',
+  leaveOutContext: 'Leave out {label}',
 });

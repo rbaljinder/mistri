@@ -9,8 +9,9 @@
  * - `MemoryEventChip`: quiet inline whisper whenever the assistant remembers,
  *   updates, or forgets a durable memory, with a direct shortcut to Manage.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Button } from '@mistriwork/ui/Button.js';
+import { assistantContextSnapshot, subscribeAssistantContext, type AssistantContextEntry } from './assistantDoor.js';
 import type { Citation, CitationsItem, MemoryEventItem } from './assistantStream.js';
 import { say } from '../copy/shell/components/AssistantCitations.js';
 import './AssistantCitations.css';
@@ -147,5 +148,41 @@ export function MemoryEventChip({ item, onManage }: { item: MemoryEventItem; onM
         </Button>
       )}
     </div>
+  );
+}
+
+const EMPTY_CONTEXTS: readonly AssistantContextEntry[] = [];
+
+/** Subscribes to mounted `useAssistantContext` chips and tracks per-panel dismissals. */
+export function usePageContextChips(): {
+  active: readonly AssistantContextEntry[];
+  dismiss: (id: string) => void;
+} {
+  const all = useSyncExternalStore(subscribeAssistantContext, assistantContextSnapshot, () => EMPTY_CONTEXTS);
+  const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set());
+  const active = all.filter((entry) => !dismissed.has(entry.id));
+  const dismiss = (id: string) =>
+    setDismissed((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  return { active, dismiss };
+}
+
+/** Dismissible composer chips representing live client page context registered via `useAssistantContext`. */
+export function PageContextChips({ entries, onDismiss }: { entries: readonly AssistantContextEntry[]; onDismiss: (id: string) => void }) {
+  if (!entries.length) return null;
+  return (
+    <>
+      {entries.map((entry) => (
+        <div key={entry.id} className="assistant-context" title={entry.summary}>
+          <span>{entry.label}</span>
+          <Button size="xs" variant="ghost" ariaLabel={say('leaveOutContext', { label: entry.label })} onClick={() => onDismiss(entry.id)}>
+            ×
+          </Button>
+        </div>
+      ))}
+    </>
   );
 }

@@ -16,7 +16,7 @@
  * the first rows, addresses), the person gets what the panel draws (a folded
  * step line, a block, a card).
  */
-import type { AppAssistant } from '../../shared/appAssistant.js';
+import { isAutoApprovedCommand, type AppAssistant } from '../../shared/appAssistant.js';
 import { propValue } from '@mistriwork/engine/shared/appComponents.js';
 import { appAddressBook, recordSegments, type AddressBook } from '../../shared/appAddress.js';
 import { viewOrder } from '../../shared/appModel.js';
@@ -45,7 +45,7 @@ interface Citation {
   key?: Record<string, unknown>;
 }
 
-/** A block as the panel draws it: a dashboard section, KPI strip, timeline, callout, tabs, record card, or author block. */
+/** A block as the panel draws it: a dashboard section, KPI strip, timeline, gallery, calendar, callout, tabs, record card, or author block. */
 export type AssistantBlock =
   | { kind: 'section'; section: Record<string, unknown> }
   | { kind: 'metrics'; title?: string; sections: Array<Record<string, unknown>> }
@@ -54,6 +54,19 @@ export type AssistantBlock =
       title?: string;
       table: string;
       items: Array<{ label: string; when: string; detail?: string; badge?: string; address?: string }>;
+    }
+  | {
+      kind: 'gallery';
+      title?: string;
+      table: string;
+      items: Array<{ label: string; image: string; detail?: string; badge?: string; address?: string }>;
+    }
+  | {
+      kind: 'calendar';
+      title?: string;
+      table: string;
+      dateField: string;
+      items: Array<{ label: string; date: string; detail?: string; badge?: string; address?: string }>;
     }
   | { kind: 'callout'; tone: 'info' | 'good' | 'warning' | 'critical'; title?: string; body: string }
   | { kind: 'tabs'; title?: string; tabs: Array<{ id: string; label: string; block: AssistantBlock }> }
@@ -898,6 +911,123 @@ async function show(
     };
   }
 
+  if (kind === 'gallery') {
+    const [pk] = primaryKey(table);
+    const labelCol = await context.naming(table);
+    const imageCol = typeof input.image === 'string' && input.image.trim() ? input.image.trim() : undefined;
+    if (!imageCol) throw new ToolRefusal('A gallery takes image: the column holding the image or photo URL.');
+    if (!table.columns.some((c) => c.name === imageCol)) {
+      throw new ToolRefusal(`"${imageCol}" is not a visible column on ${table.id}.`);
+    }
+    const extraCols = Array.isArray(input.show)
+      ? (input.show as unknown[])
+          .map(String)
+          .filter((c) => c !== pk && c !== imageCol && c !== labelCol)
+          .slice(0, 2)
+      : [];
+    const cols = [...new Set([pk, labelCol, imageCol, ...extraCols].filter(Boolean) as string[])];
+    const limit = Math.max(1, Math.min(12, Number.isInteger(input.limit) ? (input.limit as number) : 8));
+    const q = `${table.id}${condition ? ` where ${condition}` : ''} show ${cols.join(', ')} limit ${limit}`;
+    const { rows, total } = await context.run(q, limit, 'exact');
+    const safeImageUrl = (raw: unknown): string | undefined => {
+      if (typeof raw !== 'string') return undefined;
+      const trimmed = raw.trim();
+      if (!trimmed || trimmed.length > 2048) return undefined;
+      if (trimmed.startsWith('/') && !trimmed.startsWith('//')) return trimmed;
+      if (/^https?:\/\//i.test(trimmed)) return trimmed;
+      if (/^data:image\/(?:png|jpeg|jpg|webp|gif|svg\+xml);base64,/i.test(trimmed)) return trimmed;
+      return undefined;
+    };
+    const items = (
+      await Promise.all(
+        rows.map(async (row) => {
+          const image = safeImageUrl(row[imageCol]);
+          if (!image) return null;
+          const rawLabel =
+            labelCol && row[labelCol] != null && row[labelCol] !== '' ? String(row[labelCol]) : `${table.id} ${String(row[pk] ?? '')}`;
+          const detailCol = extraCols[0];
+          const badgeCol = extraCols[1];
+          const detail = detailCol && row[detailCol] != null && row[detailCol] !== '' ? String(clipped(row[detailCol])) : undefined;
+          const badge = badgeCol && row[badgeCol] != null && row[badgeCol] !== '' ? String(row[badgeCol]) : undefined;
+          const address = pk && row[pk] !== undefined ? await context.addressOf(table.id, { [pk]: row[pk] }) : undefined;
+          if (pk && row[pk] !== undefined) context.read(table.id, { [pk]: row[pk] }, rawLabel);
+          return {
+            label: plain(rawLabel, 120),
+            image,
+            ...(detail ? { detail: plain(detail, 140) } : {}),
+            ...(badge ? { badge: plain(badge, 40) } : {}),
+            ...(address ? { address } : {}),
+          };
+        }),
+      )
+    ).filter((item): item is NonNullable<typeof item> => item !== null);
+    if (!items.length) {
+      return {
+        result: { shown: 'nothing', total: 0, note: 'No rows with valid images match, so no gallery was drawn.' },
+        label: `Found no ${table.id} images for ${title ?? 'gallery'}`,
+      };
+    }
+    return {
+      result: { shown: 'gallery', total: total ?? items.length, drawn: items.length, first: items.slice(0, 5) },
+      label: `Showed ${title ?? `${table.id} gallery`}: ${items.length}`,
+      block: { kind: 'gallery', ...(title ? { title } : {}), table: table.id, items },
+    };
+  }
+
+  if (kind === 'calendar') {
+    const [pk] = primaryKey(table);
+    const labelCol = await context.naming(table);
+    const dateCol = typeof input.date === 'string' && input.date.trim() ? input.date.trim() : undefined;
+    if (!dateCol) throw new ToolRefusal('A calendar takes date: the date or timestamp column to schedule by.');
+    if (!table.columns.some((c) => c.name === dateCol)) {
+      throw new ToolRefusal(`"${dateCol}" is not a visible column on ${table.id}.`);
+    }
+    const extraCols = Array.isArray(input.show)
+      ? (input.show as unknown[])
+          .map(String)
+          .filter((c) => c !== pk && c !== dateCol && c !== labelCol)
+          .slice(0, 2)
+      : [];
+    const cols = [...new Set([pk, labelCol, dateCol, ...extraCols].filter(Boolean) as string[])];
+    const limit = Math.max(1, Math.min(24, Number.isInteger(input.limit) ? (input.limit as number) : 12));
+    const q = `${table.id}${condition ? ` where ${condition}` : ''} show ${cols.join(', ')} sort ${dateCol} asc limit ${limit}`;
+    const { rows, total } = await context.run(q, limit, 'exact');
+    const items = (
+      await Promise.all(
+        rows.map(async (row) => {
+          const dateVal = row[dateCol] != null ? String(row[dateCol]).trim() : '';
+          if (!dateVal) return null;
+          const rawLabel =
+            labelCol && row[labelCol] != null && row[labelCol] !== '' ? String(row[labelCol]) : `${table.id} ${String(row[pk] ?? '')}`;
+          const detailCol = extraCols[0];
+          const badgeCol = extraCols[1];
+          const detail = detailCol && row[detailCol] != null && row[detailCol] !== '' ? String(clipped(row[detailCol])) : undefined;
+          const badge = badgeCol && row[badgeCol] != null && row[badgeCol] !== '' ? String(row[badgeCol]) : undefined;
+          const address = pk && row[pk] !== undefined ? await context.addressOf(table.id, { [pk]: row[pk] }) : undefined;
+          if (pk && row[pk] !== undefined) context.read(table.id, { [pk]: row[pk] }, rawLabel);
+          return {
+            label: plain(rawLabel, 120),
+            date: plain(dateVal, 64),
+            ...(detail ? { detail: plain(detail, 140) } : {}),
+            ...(badge ? { badge: plain(badge, 40) } : {}),
+            ...(address ? { address } : {}),
+          };
+        }),
+      )
+    ).filter((item): item is NonNullable<typeof item> => item !== null);
+    if (!items.length) {
+      return {
+        result: { shown: 'nothing', total: 0, note: 'No dated rows match, so no calendar was drawn.' },
+        label: `Found no ${table.id} dates for ${title ?? 'calendar'}`,
+      };
+    }
+    return {
+      result: { shown: 'calendar', total: total ?? items.length, drawn: items.length, first: items.slice(0, 5) },
+      label: `Showed ${title ?? `${table.id} calendar`}: ${items.length}`,
+      block: { kind: 'calendar', ...(title ? { title } : {}), table: table.id, dateField: dateCol, items },
+    };
+  }
+
   if (kind === 'funnel') {
     const rawItems = Array.isArray(input.items) ? input.items : [];
     if (rawItems.length < 2 || rawItems.length > 8) throw new ToolRefusal('funnel takes items: 2 to 8 stage objects { label, query }.');
@@ -1083,7 +1213,7 @@ async function propose(
   session: ToolSession,
   input: Record<string, unknown>,
   id: string,
-): Promise<{ proposal: Proposal; label: string; result: unknown; review?: boolean }> {
+): Promise<{ proposal?: Proposal; label: string; result: unknown; review?: boolean; autoExecuted?: boolean }> {
   const verb = context.verbOf(String(input.action ?? ''));
   /* Ask changes nothing in front of the person: a command may be kept for review (below), where someone approves it
      on its own; a set or a New form would be a card confirmed in the answer, which Ask does not draw. */
@@ -1144,7 +1274,63 @@ async function propose(
     values: kept,
     ...(why ? { why } : {}),
   };
-  const command = verb.kind === 'command' ? (action.command as { id?: unknown } | undefined)?.id : undefined;
+  const command = verb.kind === 'command' ? (action.command as { id?: unknown; version?: unknown } | undefined)?.id : undefined;
+  const commandVersion = verb.kind === 'command' ? (action.command as { version?: unknown } | undefined)?.version : undefined;
+  if (!session.ask && typeof command === 'string' && isAutoApprovedCommand(session.assistant, verb.resource, verb.id, command)) {
+    /* Named low-risk command: prepares and executes directly through the person's own loopback command routes,
+       preserving every grant check, row policy, tenant lease, optimistic lock, input validation, and journal entry. */
+    const prepBody: Record<string, unknown> = {
+      command,
+      ...(typeof commandVersion === 'number' ? { commandVersion } : {}),
+      key: found.key,
+    };
+    const prepared = await session.loop('POST', `/api/commands/prepare?app=${encodeURIComponent(session.app)}`, prepBody, session.signal);
+    if (!prepared || prepared.status < 200 || prepared.status >= 300) {
+      throw new ToolRefusal(`${verb.label} is not available on this record right now.`);
+    }
+    const expectedVersion =
+      prepared.body &&
+      typeof prepared.body === 'object' &&
+      typeof (prepared.body as { expectedVersion?: unknown }).expectedVersion === 'number'
+        ? (prepared.body as { expectedVersion: number }).expectedVersion
+        : 0;
+    const safeId = id.replace(/[^A-Za-z0-9_-]/g, '_') || 'run';
+    const execBody: Record<string, unknown> = {
+      command,
+      commandVersion: typeof commandVersion === 'number' ? commandVersion : 1,
+      key: found.key,
+      expectedVersion,
+      input: kept,
+      idempotencyKey: `assistant-auto-${safeId}`.slice(0, 128),
+    };
+    const reply = await session.loop('POST', `/api/commands/execute?app=${encodeURIComponent(session.app)}`, execBody, session.signal);
+    if (!reply || reply.status < 200 || reply.status >= 300) {
+      const errMsg =
+        reply?.body &&
+        typeof reply.body === 'object' &&
+        'message' in reply.body &&
+        typeof (reply.body as { message?: unknown }).message === 'string'
+          ? (reply.body as { message: string }).message
+          : reply?.body &&
+              typeof reply.body === 'object' &&
+              'error' in reply.body &&
+              typeof (reply.body as { error?: unknown }).error === 'string'
+            ? (reply.body as { error: string }).error
+            : `${verb.label} could not be run right now.`;
+      throw new ToolRefusal(errMsg);
+    }
+    return {
+      autoExecuted: true,
+      label: `Auto-ran ${verb.label}: ${found.title}`,
+      result: {
+        executed: `${verb.resource}.${verb.id}`,
+        record: found.title,
+        status: 'done',
+        autoApproved: true,
+        output: reply.body,
+      },
+    };
+  }
   if (session.propose && typeof command === 'string') {
     /* A command is kept for review, as the person: their grant and their rows decide it (http/assistantProposal.ts),
        and approving it runs it as whoever approves. The turn does not wait for it. */
@@ -1741,7 +1927,13 @@ export async function answerTool(session: ToolSession, name: string, input: unkn
     }
     if (!(session.assistant.tools as string[]).includes(name)) throw new ToolRefusal(`There is no tool "${name}" here.`);
     if (name === 'run') {
-      const { proposal, label, result, review } = await propose(context, session, args, id);
+      const { proposal, label, result, review, autoExecuted } = await propose(context, session, args, id);
+      if (autoExecuted || !proposal) {
+        return {
+          result: JSON.stringify(result),
+          display: [{ type: 'step', id, tool: name, label }],
+        };
+      }
       return {
         result: JSON.stringify(result),
         // A stored proposal is not waited for: without `proposal`, the turn goes on (assistantTurn.ts).

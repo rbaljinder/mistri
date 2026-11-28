@@ -65,6 +65,7 @@ export {
   useAction,
   useAnalytics,
   useAssistant,
+  useAssistantContext,
   useBreakdown,
   useComposer,
   useCommand,

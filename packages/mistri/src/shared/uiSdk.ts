@@ -109,6 +109,7 @@ export const UI_EXPORTS = [
   'useHref',
   'useComposer',
   'useAssistant',
+  'useAssistantContext',
   'useFormat',
   'useLook',
   'useToken',
