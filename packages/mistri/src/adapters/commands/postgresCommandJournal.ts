@@ -77,7 +77,7 @@ import { provisionPostgresCommandStaging, stagePostgresFile, takePostgresStaged 
 import type { StagedFileRow, StagedLimits, StagedTake } from './commandStaging.js';
 import { countPostgresLinks, mintPostgresLink, openPostgresLink, readPostgresLink, revokePostgresLinks } from './commandLinks.js';
 import { postgresProposals, postgresProposalsAtCommit } from './commandProposals.js';
-import { appendPostgresReadAudits } from '../readAudit/postgresReadAudit.js';
+import { assertPostgresReadAudit, postgresReadAuditInsertStatement } from '../readAudit/postgresReadAudit.js';
 import type { ReadAuditRow } from '../readAudit/readAudit.js';
 
 /** Explicit maintenance operation. Never called implicitly when opening an App.
@@ -346,19 +346,37 @@ export function createPostgresCommandJournal(client: PgQuery, operations: Transa
         if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
         return takePostgresStaged(client, input.appId, namespace, input.take);
       }),
-    /* One INSERT on the owner's transaction, so the rows commit or roll back with the command. A row of another App,
-       or of another tenant than the one this journal is bound to, is refused. */
-    appendReadAudit: (rows: readonly ReadAuditRow[]) =>
-      invoke({ rows }, async (input) => {
-        for (const row of input.rows)
+    /* One INSERT per 256-row chunk on the owner's transaction, attested once per adapter (`attestOnce`) and queued via
+       `beforeCommit` on a pipelining writer so it leaves in the COMMIT flight instead of a round trip of its own. */
+    appendReadAudit: (rows: readonly ReadAuditRow[]) => {
+      let captured: { rows: readonly ReadAuditRow[] };
+      try {
+        captured = rules.capture({ rows });
+      } catch (error) {
+        return operations.run(async () => {
+          throw error;
+        });
+      }
+      return operations.run(async () => {
+        if (!Array.isArray(captured.rows)) return invalid();
+        for (const row of captured.rows)
           if (
             (member && row?.app !== member.appId) ||
             (appScope && row?.app !== appScope.appId) ||
             (bound && row?.tenant !== bound.tenantId)
           )
             return invalid();
-        await appendPostgresReadAudits(client, input.rows);
-      }),
+        if (!captured.rows.length) return;
+        await assertPostgresReadAudit(client);
+        const statements: Array<{ text: string; values: unknown[] }> = [];
+        for (let i = 0; i < captured.rows.length; i += 256)
+          statements.push(postgresReadAuditInsertStatement(captured.rows.slice(i, i + 256)));
+        if (!beforeCommit(client, statements)) {
+          await inTransaction();
+          for (const statement of statements) await client.query(statement.text, statement.values);
+        }
+      });
+    },
     // Links in the journal's namespace: a tenant's are its own, and none is read across Apps.
     mintLink: (row: CommandLinkRow) =>
       invoke({ row }, async ({ row }) => {

@@ -46,7 +46,8 @@ import {
 } from './businessCommands.js';
 import { canonicalKey, createCommandDb, cteOf, keyFilter, normalizeRow, type UntypedRow, type WriteTable } from './commandDb.js';
 import { carryServerRequest } from '@mistriwork/engine/server/serverRequests.js';
-import { auditCommandRead, type CommandReadAudit, type ReadAuditSink } from '../readAudit.js';
+import { auditCommandRead, ReadAuditFailed, type CommandReadAudit, type ReadAuditSink } from '../readAudit.js';
+import { assertReadAuditRow, type ReadAuditRow } from '../../adapters/readAudit/readAudit.js';
 import { FLOW_TELL, flowCommandOf } from './flowCommandBrand.js';
 import { compileWhen, failingCondition, recordPartHolds, type DerivedFailure, whenHolds, whenPerson } from './commandWhen.js';
 import { whenRefusalSentence } from './commandSaying.js';
@@ -1402,8 +1403,9 @@ async function executeUntraced(
                 table = catalog?.[command.target];
               if (!table) throw new AppAccessDenied();
               /* Inside the command's transaction, so through its journal: a second writer would nest in it (SQLite
-               refuses that) or wait on it. The rows commit with the command or roll back with it; a journal that
-               keeps no read audit fails the command (ReadAuditFailed). */
+               refuses that) or wait on it. Buffered in order while reads run (including Promise.all waves) and flushed
+               in one batch before COMMIT, so audited reads never serialize a command's pipelined queries. */
+              const heldAudits: ReadAuditRow[] = [];
               const heldAudit: CommandReadAudit | undefined = authorized.readAudit && {
                 ...authorized.readAudit,
                 sink: Object.freeze<ReadAuditSink>({
@@ -1412,7 +1414,8 @@ async function executeUntraced(
                   append: async (row) => {
                     if (typeof journal.appendReadAudit !== 'function')
                       throw new Error('this database keeps no read audit in a command transaction');
-                    await journal.appendReadAudit([row]);
+                    assertReadAuditRow(row);
+                    heldAudits.push(row);
                   },
                 }),
               };
@@ -2083,6 +2086,15 @@ async function executeUntraced(
                 !(await journal.settleProposal?.(authorized.actor.appId, options.proposalId, id))
               )
                 throw new BusinessCommandExecutionError('temporarily_unavailable');
+              if (heldAudits.length) {
+                try {
+                  for (let i = 0; i < heldAudits.length; i += 256) await journal.appendReadAudit!(heldAudits.slice(i, i + 256));
+                } catch (error) {
+                  throw new ReadAuditFailed(`The read could not be recorded in the read audit: ${(error as Error).message}`, {
+                    cause: error,
+                  });
+                }
+              }
               if (track === undefined) await journal.commit(receipt, audits.length === 1 ? audits[0] : audits, eventBatch);
               // The receipt, its audit and the replay check are one statement: taken, this attempt rolls back and replays it.
               else if (track !== 'none' && !(await journal.insert!(receipt, audits.length === 1 ? audits[0] : audits)))

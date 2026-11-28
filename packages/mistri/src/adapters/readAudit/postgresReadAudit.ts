@@ -10,6 +10,7 @@
 import { Refusal } from '@mistriwork/engine/adapters/adapter.js';
 import { layoutRefusal, postgresLayoutVersion } from '@mistriwork/engine/adapters/layoutRefusal.js';
 import type { PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
+import { attestOnce } from '@mistriwork/engine/adapters/postgresTransactionHandle.js';
 import { canonicalCommandJson } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import { describePostgresRelations, type PostgresRelationDescription } from '../commands/postgresRelations.js';
 import { withPostgresMaintenanceTransaction } from '@mistriwork/engine/adapters/postgresMaintenance.js';
@@ -237,20 +238,21 @@ export async function provisionPostgresReadAudit(url: string): Promise<{ version
 
 const COLUMNS = 15;
 
-/**
- * Rows gathered by a group commit (groupCommit.ts), in one INSERT: one
- * statement, so they are written together or not at all, and every read they
- * name is answered alike.
- */
-export async function appendPostgresReadAudits(client: PgQuery, rows: readonly ReadAuditRow[], attested = false): Promise<void> {
+/** Attest the read audit store once per adapter on a transaction handle (`attestOnce`), or in full on a bare client. */
+export async function assertPostgresReadAudit(client: PgQuery): Promise<void> {
+  await attestOnce(client, READ_AUDIT_PREFIX, async () => {
+    if (!(await postgresReadAuditReady(client))) throw new ReadAuditUnavailable(await layoutMessage(client));
+  });
+}
+
+/** One multi-row INSERT statement for `rows`, validated first. */
+export function postgresReadAuditInsertStatement(rows: readonly ReadAuditRow[]): { text: string; values: unknown[] } {
   for (const row of rows) assertReadAuditRow(row);
-  if (!rows.length) return;
-  if (!attested && !(await postgresReadAuditReady(client))) throw new ReadAuditUnavailable(await layoutMessage(client));
   const places = rows.map((_, at) => `(${Array.from({ length: COLUMNS }, (_, column) => `$${at * COLUMNS + column + 1}`).join(', ')})`);
-  await client.query(
-    `INSERT INTO ${q(log)} (at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json, command, roles_json, membership, scope)
+  return {
+    text: `INSERT INTO ${q(log)} (at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json, command, roles_json, membership, scope)
     VALUES ${places.join(', ')}`,
-    rows.flatMap((row) => [
+    values: rows.flatMap((row) => [
       row.at,
       row.app,
       row.tenant,
@@ -267,7 +269,20 @@ export async function appendPostgresReadAudits(client: PgQuery, rows: readonly R
       row.membership ?? null,
       row.scope ?? null,
     ]),
-  );
+  };
+}
+
+/**
+ * Rows gathered by a group commit (groupCommit.ts), in one INSERT: one
+ * statement, so they are written together or not at all, and every read they
+ * name is answered alike.
+ */
+export async function appendPostgresReadAudits(client: PgQuery, rows: readonly ReadAuditRow[], attested = false): Promise<void> {
+  for (const row of rows) assertReadAuditRow(row);
+  if (!rows.length) return;
+  if (!attested && !(await postgresReadAuditReady(client))) throw new ReadAuditUnavailable(await layoutMessage(client));
+  const statement = postgresReadAuditInsertStatement(rows);
+  await client.query(statement.text, statement.values);
 }
 
 /* `attested`: the adapter holds an attestation under the schema epoch it just read (postgres.ts, storeAttested). */
