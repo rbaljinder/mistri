@@ -143,6 +143,11 @@ interface ResourceReadHttpOptions {
    * (TenantReadContext.lastWave). Internal; absent, nothing.
    */
   lastWave?: () => void;
+  /**
+   * How many items of `/api/breakdowns` to run together (defaults to BREAKDOWN_CONCURRENCY = 4).
+   * Callers on a single pipelined shared snapshot raise this so a dashboard leaves in one flight.
+   */
+  concurrency?: number;
 }
 
 interface ResourceReadHttpReply {
@@ -509,7 +514,8 @@ export async function dispatchResourceReadHttp(
         }
       }
     };
-    await Promise.all(Array.from({ length: Math.min(BREAKDOWN_CONCURRENCY, queue.length) }, one));
+    const workers = Math.max(1, Math.min(BREAKDOWN_BATCH, options.concurrency ?? BREAKDOWN_CONCURRENCY, queue.length));
+    await Promise.all(Array.from({ length: workers }, one));
     return reply(200, { results });
   }
 

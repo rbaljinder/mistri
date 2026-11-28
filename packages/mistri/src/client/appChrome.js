@@ -35,7 +35,7 @@ import { $, allowMutationExit, el, state } from '@mistriwork/kit/client/core.js'
 import { prepareEditingExit } from '@mistriwork/kit/client/write.js';
 import { RuntimeMetadataError } from '@mistriwork/kit/client/requestIdentity.js';
 import { setAppConfigured } from '@mistriwork/kit/client/connectionScope.js';
-import { finishStartup } from '@mistriwork/kit/client/startup.js';
+import { finishStartup, whenStartupReady } from '@mistriwork/kit/client/startup.js';
 import { lookSheetReady } from '@mistriwork/kit/client/visualTheme.js';
 import { settingsEntries } from './appSettings.js';
 import { onDemand, sayUnavailable } from '@mistriwork/kit/client/components/onDemand.js';
@@ -661,17 +661,28 @@ export function appSettingsCommands() {
 }
 
 /* Changes other people make (liveSync.ts), in an App a person is signed in to or may read, never in the Workbench:
-   a part of its own, fetched here and idle on a server that has it off. */
+   a part of its own, fetched here and idle on a server that has it off. Deferred past initial startup so the
+   SSE stream and its initial DB snapshot never compete with first-paint page data. */
 let liveModule;
+/** @type {(() => void) | undefined} */
+let stopWaitingForLive;
 function followChanges() {
+  stopWaitingForLive?.();
+  stopWaitingForLive = undefined;
   if (inAppMode() && !isPublicVisitor()) {
-    void import('./liveSync.js').then(
-      (live) => {
-        liveModule = live;
-        live.startLiveSync({ connection: () => state.activeConnection, tenant: tenant !== null });
-      },
-      unloaded(say('liveSync')),
-    );
+    const start = () => {
+      stopWaitingForLive = undefined;
+      if (!inAppMode() || isPublicVisitor()) return;
+      void import('./liveSync.js').then(
+        (live) => {
+          liveModule = live;
+          live.startLiveSync({ connection: () => state.activeConnection, tenant: tenant !== null });
+        },
+        unloaded(say('liveSync')),
+      );
+    };
+    if (shellRoot().hasAttribute('data-starting')) stopWaitingForLive = whenStartupReady(start);
+    else start();
   } else liveModule?.stopLiveSync();
 }
 

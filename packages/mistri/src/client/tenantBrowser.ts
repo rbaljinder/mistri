@@ -390,6 +390,25 @@ export function tenantControl(
   /* What the bar offers beside the control, offered in its dialog too: on a
      phone the bar is one row and keeps only the control (style.css). */
   let actions: TenantControlAction[] = [];
+  let choicesStale = choicesHeld;
+  choicesHeld = false;
+  let refreshGeneration = 0,
+    refreshing = false,
+    refreshError: string | undefined;
+  const openControl = () => {
+    if (!choicesStale || refreshing || sessionIdentity() !== owner) return;
+    choicesStale = false;
+    void discoverTenants().then(
+      (found) => {
+        if (sessionIdentity() !== owner || refreshing) return;
+        tenantIds = found;
+        drawControl();
+      },
+      () => {
+        /* The choices held stand; the bar's retry asks again. */
+      },
+    );
+  };
   const control = element(
     'span',
     createElement(TenantControl, {
@@ -400,15 +419,16 @@ export function tenantControl(
       platformLabel,
       tenantLabel,
       currentTenant: selected.tenantId,
+      onOpen: openControl,
       onSelect: (tenantId) => {
         void switchTo(tenantId);
+      },
+      onRetry: () => {
+        void refresh();
       },
     }),
     'tenant-control-host',
   );
-  let refreshGeneration = 0,
-    refreshing = false,
-    refreshError: string | undefined;
   const drawControl = () => {
     if (sessionIdentity() !== owner) return;
     mount(
@@ -424,6 +444,7 @@ export function tenantControl(
         error: refreshError,
         actions,
         currentTenant: selected.tenantId,
+        onOpen: openControl,
         onSelect: (tenantId) => {
           void switchTo(tenantId);
         },
@@ -435,6 +456,7 @@ export function tenantControl(
   };
   const refresh = async () => {
     if (busy || sessionIdentity() !== owner) return;
+    choicesStale = false;
     const ticket = ++refreshGeneration;
     refreshing = true;
     refreshError = undefined;
@@ -452,21 +474,6 @@ export function tenantControl(
     }
   };
   ownDiscoveryRefresh(owner, refresh);
-  /* A reload re-entered with no discovery offers this tab's last choices: asked again once the bar has drawn, and
-     drawn quietly, as nothing the page waits on. */
-  if (choicesHeld) {
-    choicesHeld = false;
-    void discoverTenants().then(
-      (found) => {
-        if (sessionIdentity() !== owner || refreshing) return;
-        tenantIds = found;
-        drawControl();
-      },
-      () => {
-        /* The choices held stand; the bar's retry asks again. */
-      },
-    );
-  }
   const switchTo = async (tenantId: string) => {
     if (busy || refreshing || sessionIdentity().tenant !== selected || tenantId === selected.tenantId || !tenantIds.includes(tenantId))
       return;

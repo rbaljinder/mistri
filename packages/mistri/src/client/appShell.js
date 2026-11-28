@@ -91,7 +91,9 @@ export async function start() {
     landingAt?.kind !== 'sign-in' &&
     (entersTenant || landingAt?.kind !== 'root' || shellQuery('link[rel="modulepreload"][href*="shell"]')),
   );
-  const shellWarm = warmsShell ? Promise.all([import('@mistriwork/kit/client/app.js'), import('./appnav.js')]) : undefined;
+  const shellWarm = warmsShell
+    ? Promise.all([import('@mistriwork/kit/client/app.js'), import('./appnav.js'), ...(entersTenant ? [import('./tenantShell.js')] : [])])
+    : undefined;
   shellWarm?.catch(() => undefined);
   const entered = entersTenant
     ? await import('./tenantEnter.js')

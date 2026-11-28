@@ -98,25 +98,37 @@ export function createTenantBrandingService(options: {
   const now = options.now ?? Date.now;
   const key = (tenant: string) => `mistri:branding:${app.id}:${tenant}`;
 
+  const inFlight = new Map<string, Promise<TenantBrandingState>>();
+  const presentations = new Map<string, BrandingPresentation | undefined>();
+  const PRESENTATION_MAX = 256;
+
   /** The stored value, parsed against today's declaration; a value it no longer admits is none. */
-  const load = async (tenant: string): Promise<TenantBrandingState> => {
-    let stored: { value: string; revision: number } | null = null;
-    try {
-      const cached = await cache.get(key(tenant));
-      if (cached !== undefined) stored = JSON.parse(cached) as { value: string; revision: number } | null;
-    } catch {
-      stored = null;
-    }
-    if (stored === null) {
-      const row = await store.read({ app: app.id, tenant });
-      stored = row ? { value: row.value, revision: row.revision } : { value: '{}', revision: 0 };
-      void cache.set(key(tenant), JSON.stringify(stored), TTL_MS).catch(() => {});
-    }
-    try {
-      return { value: parseTenantBranding(JSON.parse(stored.value), declaration), revision: stored.revision };
-    } catch {
-      return { value: {}, revision: stored.revision };
-    }
+  const load = (tenant: string): Promise<TenantBrandingState> => {
+    const running = inFlight.get(tenant);
+    if (running) return running;
+    const work = (async (): Promise<TenantBrandingState> => {
+      let stored: { value: string; revision: number } | null = null;
+      try {
+        const cached = await cache.get(key(tenant));
+        if (cached !== undefined) stored = JSON.parse(cached) as { value: string; revision: number } | null;
+      } catch {
+        stored = null;
+      }
+      if (stored === null) {
+        const row = await store.read({ app: app.id, tenant });
+        stored = row ? { value: row.value, revision: row.revision } : { value: '{}', revision: 0 };
+        void cache.set(key(tenant), JSON.stringify(stored), TTL_MS).catch(() => {});
+      }
+      try {
+        return { value: parseTenantBranding(JSON.parse(stored.value), declaration), revision: stored.revision };
+      } catch {
+        return { value: {}, revision: stored.revision };
+      }
+    })().finally(() => {
+      if (inFlight.get(tenant) === work) inFlight.delete(tenant);
+    });
+    inFlight.set(tenant, work);
+    return work;
   };
 
   return Object.freeze({
@@ -126,11 +138,15 @@ export function createTenantBrandingService(options: {
       try {
         const { value: saved, revision } = await load(tenant);
         if (!revision || !Object.keys(saved).length) return undefined;
+        const privately = presentationOptions.private !== false;
+        const publicly = presentationOptions.public === true;
+        const rolesKey = presentationOptions.roles?.length ? [...presentationOptions.roles].sort().join('\0') : '';
+        const memoKey = `${tenant}\0${revision}\0${privately ? 1 : 0}\0${publicly ? 1 : 0}\0${rolesKey}`;
+        if (presentations.has(memoKey)) return presentations.get(memoKey);
         const worn = audienceBranding(declaration, saved, { public: presentationOptions.public, roles: presentationOptions.roles });
         const value = worn.value;
         const theme = tenantTheme(worn.declaration, value);
-        const privately = presentationOptions.private !== false;
-        return Object.freeze({
+        const built = Object.freeze({
           value: tenantBrandingPresentation({
             selection: {
               deployment: app.id,
@@ -152,6 +168,9 @@ export function createTenantBrandingService(options: {
           private: privately,
           readerPicker: privately,
         });
+        if (presentations.size >= PRESENTATION_MAX) presentations.delete(presentations.keys().next().value!);
+        presentations.set(memoKey, built);
+        return built;
       } catch {
         return undefined;
       }
@@ -216,6 +235,7 @@ export function createTenantBrandingService(options: {
         at: new Date(now()).toISOString(),
       });
       // Every instance reads the new value on its next page: the copy they share is gone.
+      for (const memoKey of presentations.keys()) if (memoKey.startsWith(`${tenant}\0`)) presentations.delete(memoKey);
       await cache.delete(key(tenant)).catch(() => {});
       return { value, revision };
     },

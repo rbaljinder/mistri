@@ -176,13 +176,16 @@ class Projection {
   wake = () => {
     if (document.visibilityState !== 'hidden') this.refresh();
   };
+  pageshow = (event: PageTransitionEvent) => {
+    if (event.persisted !== false) this.wake();
+  };
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     if (this.listeners.size === 1) {
       active.add(this);
       this.refresh();
       addHostListener(window, 'focus', this.wake);
-      addHostListener(window, 'pageshow', this.wake);
+      addHostListener(window, 'pageshow', this.pageshow);
       addHostListener(document, 'visibilitychange', this.wake);
     }
     return () => {
@@ -191,7 +194,7 @@ class Projection {
         active.delete(this);
         this.clear();
         removeHostListener(window, 'focus', this.wake);
-        removeHostListener(window, 'pageshow', this.wake);
+        removeHostListener(window, 'pageshow', this.pageshow);
         removeHostListener(document, 'visibilitychange', this.wake);
       }
     };

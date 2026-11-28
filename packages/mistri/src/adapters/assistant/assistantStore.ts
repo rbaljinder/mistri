@@ -143,7 +143,12 @@ const title = (text: string) => {
 };
 
 /** The store's rules over one engine's transaction; `t` names a reserved table as the engine qualifies it. */
-export function createAssistantStore(transaction: Transaction, t: (name: string) => string, close: () => Promise<void>): AssistantStore {
+export function createAssistantStore(
+  transaction: Transaction,
+  t: (name: string) => string,
+  close: () => Promise<void>,
+  read: Transaction = transaction,
+): AssistantStore {
   const { conversation, event, usage } = ASSISTANT_TABLES;
   const owned = async (db: Db, owner: AssistantOwner, id: string) =>
     typeof id === 'string' && id.length <= 64
@@ -160,7 +165,7 @@ export function createAssistantStore(transaction: Transaction, t: (name: string)
   return {
     async list(owner, limit) {
       assertOwner(owner);
-      const rows = await transaction((db) =>
+      const rows = await read((db) =>
         db.all(
           `SELECT id, title, state, created_at, updated_at FROM ${t(conversation)}
           WHERE app = ? AND tenant = ? AND account = ? ORDER BY updated_at DESC, id DESC LIMIT ?`,
@@ -192,7 +197,7 @@ export function createAssistantStore(transaction: Transaction, t: (name: string)
     async get(owner, id) {
       assertOwner(owner);
       if (typeof id !== 'string' || id.length > 64) return null;
-      const rows = await transaction((db) =>
+      const rows = await read((db) =>
         db.all(
           `SELECT id, title, state, created_at, updated_at FROM ${t(conversation)} WHERE id = ? AND app = ? AND tenant = ? AND account = ?`,
           id,
@@ -275,7 +280,7 @@ export function createAssistantStore(transaction: Transaction, t: (name: string)
       const most = Math.max(1, Math.min(50, Math.trunc(limit)));
       /* One statement, owner-scoped: candidates by their stored JSON (the needle spelled as JSON spells it), then
          each confirmed on its words alone, so a match inside a tool call's input or a key name is not a match. */
-      const rows = await transaction((db) =>
+      const rows = await read((db) =>
         db.all(
           `SELECT c.id, c.title, c.state, c.created_at, c.updated_at, e.kind, e.body_json
           FROM ${t(conversation)} c JOIN ${t(event)} e ON e.conversation = c.id
@@ -316,9 +321,7 @@ export function createAssistantStore(transaction: Transaction, t: (name: string)
     },
     async spent(owner, day) {
       assertOwner(owner);
-      const rows = await transaction((db) =>
-        db.all(`SELECT tenant, account, tokens FROM ${t(usage)} WHERE app = ? AND day = ?`, owner.app, day),
-      );
+      const rows = await read((db) => db.all(`SELECT tenant, account, tokens FROM ${t(usage)} WHERE app = ? AND day = ?`, owner.app, day));
       let person = 0;
       let tenant = 0;
       let app = 0;
@@ -333,7 +336,7 @@ export function createAssistantStore(transaction: Transaction, t: (name: string)
     },
     async tenantEnabled(app, tenant) {
       if (typeof app !== 'string' || typeof tenant !== 'string' || !app || !tenant) return false;
-      const rows = await transaction((db) =>
+      const rows = await read((db) =>
         db.all(
           `SELECT enabled FROM ${t(TENANT_SWITCH_TABLES.tenant)} WHERE app = ? AND tenant = ? AND feature = ?`,
           app,

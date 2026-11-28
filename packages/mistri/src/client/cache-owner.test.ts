@@ -255,13 +255,19 @@ test('late layout write cannot publish or clear the newer same-key pending save 
 });
 
 test('old filter prefetch is cancelled and cannot seed or overwrite the next owner query', async () => {
-  const north = deferred();
-  mocks.api.mockReturnValueOnce(north.promise);
+  // Tenant sessions have no saved-views store and skip /api/filters altogether.
+  await lists.loadSavedFilters();
+  expect(mocks.api).not.toHaveBeenCalled();
+
+  identity.lockSessionIdentity();
+  identity.establishSessionIdentity({ signedIn: true, appId: 'app', accountId: 'ada' });
+  const firstAccount = deferred();
+  mocks.api.mockReturnValueOnce(firstAccount.promise);
   const first = lists.loadSavedFilters();
-  select('south');
+  identity.establishSessionIdentity({ signedIn: true, appId: 'app', accountId: 'bob' });
   mocks.api.mockResolvedValueOnce({ filters: { south: [] } });
   await lists.loadSavedFilters();
-  north.resolve({ filters: { privateNorth: [] } });
+  firstAccount.resolve({ filters: { privateNorth: [] } });
   await first;
   // A reply that does not say whose list it is offers no Save.
   expect(queryClient.getQueryData(['filters', 'same-connection'])).toEqual({ filters: { south: [] }, store: 'none' });

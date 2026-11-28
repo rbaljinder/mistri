@@ -180,7 +180,7 @@ export function useCommandAnswers(checks: Check[], enabled = true, surface?: obj
   const identity = useSyncExternalStore(subscribeSessionIdentity, sessionIdentity, sessionIdentity);
   const leaseSnapshot = () => {
     const lease = captureTenantLease(identity);
-    return `${lease?.tabId}:${lease?.context}:${lease?.expiresAt}:${!identity.tenantRequired || tenantLeaseActive(identity)}`;
+    return `${lease?.tabId}:${lease?.context}:${!identity.tenantRequired || tenantLeaseActive(identity)}`;
   };
   useSyncExternalStore(subscribeTenantLease, leaseSnapshot, leaseSnapshot);
   const lease = captureTenantLease(identity);

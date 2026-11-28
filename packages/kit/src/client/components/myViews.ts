@@ -20,6 +20,7 @@
  */
 import { useQuery, type QueryClient } from '@tanstack/react-query';
 import { api, state } from '../core.js';
+import { sessionIdentity } from '../sessionIdentity.js';
 import { shell } from '../shellMode.js';
 import { say } from '../copy/lists/components/myViews.js';
 
@@ -42,10 +43,11 @@ const valid = (item: unknown): item is SavedView =>
 
 /* Anything but the two stores the server names is no store: a reply that
    does not say whose list this is must not be offered a Save. A signed-out
-   visitor (`auth.public`) is asked nothing: there is no account to keep views
-   for, and the read's 401 would draw the sign-in screen over the browsing. */
+   visitor (`auth.public`) or a tenant App (`tenantRequired`, which refuses
+   `/api/filters` on the client transport) is asked nothing: there is no
+   saved-views store there, and asking only throws locally and stirs startup. */
 export async function fetchSavedViews(): Promise<Saved> {
-  if (shell().publicVisitor()) return { filters: {}, store: 'none' };
+  if (shell().publicVisitor() || sessionIdentity().tenantRequired) return { filters: {}, store: 'none' };
   const data = (await api('/api/filters')) as { filters?: Record<string, SavedView[]>; store?: unknown };
   const store = data.store === 'shared' || data.store === 'account' ? data.store : 'none';
   return { filters: data.filters ?? {}, store };

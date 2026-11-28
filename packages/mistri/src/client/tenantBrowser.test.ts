@@ -5,12 +5,13 @@ import type { TenantContextReply, TenantContextRecovery } from '../shared/tenant
 
 const mocks = vi.hoisted(() => ({
   discover: vi.fn<() => Promise<readonly string[]>>(),
+  enter: vi.fn(),
   choose: vi.fn<(tenantId: string, previous?: TenantContextReply) => Promise<TenantContextReply>>(),
   recover: vi.fn<(tabId: string) => Promise<TenantContextRecovery>>(),
   renew: vi.fn(),
   checkSession: vi.fn(),
   invalidate: vi.fn(),
-  mount: vi.fn<(host: HTMLElement, tree: ReactElement<TenantChooserProps>) => void>(),
+  mount: vi.fn<(host: HTMLElement, tree: ReactElement<TenantChooserProps & { onOpen?: () => void }>) => void>(),
   supportStatus: vi.fn(),
   showSupportSession: vi.fn(),
 }));
@@ -21,6 +22,7 @@ vi.mock('./tenantSupport.js', async (original) => ({
 }));
 vi.mock('./tenantTransport.js', () => ({
   discoverTenants: mocks.discover,
+  enterTenant: mocks.enter,
   chooseTenant: mocks.choose,
   recoverTenant: mocks.recover,
   renewTenant: mocks.renew,
@@ -814,4 +816,24 @@ test('a support session that ended before it could be resumed leaves the choices
   await settle();
   expect(mocks.showSupportSession).not.toHaveBeenCalled();
   expect(props()).toMatchObject({ tenantIds: ['@platform'], busy: false });
+});
+
+test('a reentered reload defers tenant discovery until the reader opens the tenant switcher', async () => {
+  const lease = reply('north');
+  mocks.enter.mockResolvedValueOnce({ tenants: ['north'], lease, reentered: true });
+  const chosen = await browser.initialTenantSelection(host, 'Atlas', 'north', undefined, undefined, { path: '/atlas', search: '' });
+  expect(chosen).toEqual(lease);
+  expect(mocks.discover).not.toHaveBeenCalled();
+  browser.tenantControl(
+    async () => true,
+    async () => {},
+    async () => {},
+  );
+  await settle();
+  expect(mocks.discover).not.toHaveBeenCalled();
+  mocks.discover.mockResolvedValueOnce(['north', 'south']);
+  (mocks.mount.mock.calls.at(-1)![1].props as TenantChooserProps & { onOpen?: () => void }).onOpen?.();
+  await settle();
+  expect(mocks.discover).toHaveBeenCalledOnce();
+  expect(props()).toMatchObject({ tenantIds: ['north', 'south'] });
 });

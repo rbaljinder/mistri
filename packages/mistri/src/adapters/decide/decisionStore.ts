@@ -254,7 +254,12 @@ const MOVES: Readonly<Record<DecisionSettled['outcome'], readonly DecisionOutcom
 };
 
 /** The store's rules over one engine's transaction; `t` names a reserved table as the engine qualifies it. */
-export function createDecisionStore(transaction: Transaction, t: (name: string) => string, close: () => Promise<void>): DecisionStore {
+export function createDecisionStore(
+  transaction: Transaction,
+  t: (name: string) => string,
+  close: () => Promise<void>,
+  read: Transaction = transaction,
+): DecisionStore {
   const { record, usage } = DECISION_TABLES;
   const switches = TENANT_SWITCH_TABLES.tenant;
   const one = async (db: Db, owner: DecisionOwner, id: string) => {
@@ -339,11 +344,11 @@ export function createDecisionStore(transaction: Transaction, t: (name: string) 
     async get(owner, id) {
       assertOwner(owner);
       if (typeof id !== 'string' || id.length > 128) return null;
-      return transaction((db) => one(db, owner, id));
+      return read((db) => one(db, owner, id));
     },
     async ofRecord(owner, resource, recordKey, limit) {
       assertOwner(owner);
-      const rows = await transaction((db) =>
+      const rows = await read((db) =>
         db.all(
           `SELECT ${COLUMNS} FROM ${t(record)} WHERE app = ? AND tenant = ? AND resource = ? AND record_key = ?
           ORDER BY created_at DESC, id DESC LIMIT ?`,
@@ -360,7 +365,7 @@ export function createDecisionStore(transaction: Transaction, t: (name: string) 
       assertOwner(owner);
       const keys = [...new Set(recordKeys)].slice(0, 500);
       if (!keys.length) return [];
-      const rows = await transaction((db) =>
+      const rows = await read((db) =>
         db.all(
           `SELECT ${COLUMNS} FROM ${t(record)} WHERE app = ? AND tenant = ? AND resource = ? AND outcome = 'suggested'
             AND record_key IN (${keys.map(() => '?').join(', ')})
@@ -398,7 +403,7 @@ export function createDecisionStore(transaction: Transaction, t: (name: string) 
     },
     async calls(owner, day) {
       assertOwner(owner);
-      const rows = await transaction((db) => db.all(`SELECT tenant, calls FROM ${t(usage)} WHERE app = ? AND day = ?`, owner.app, day));
+      const rows = await read((db) => db.all(`SELECT tenant, calls FROM ${t(usage)} WHERE app = ? AND day = ?`, owner.app, day));
       let tenant = 0,
         app = 0;
       for (const row of rows) {
@@ -409,7 +414,7 @@ export function createDecisionStore(transaction: Transaction, t: (name: string) 
     },
     async usage(app, tenant, from) {
       assertOwner({ app, tenant: tenant ?? '' });
-      const rows = await transaction((db) =>
+      const rows = await read((db) =>
         tenant === undefined
           ? db.all(
               `SELECT tenant, day, calls, units, cost_micros FROM ${t(usage)} WHERE app = ? AND day >= ? ORDER BY day, tenant`,
@@ -433,7 +438,7 @@ export function createDecisionStore(transaction: Transaction, t: (name: string) 
     },
     async switches(app, tenant) {
       assertOwner({ app, tenant });
-      const rows = await transaction((db) =>
+      const rows = await read((db) =>
         db.all(
           `SELECT feature, enabled, consent, changed_at FROM ${t(switches)} WHERE app = ? AND tenant = ? AND feature LIKE ? ORDER BY feature`,
           app,
