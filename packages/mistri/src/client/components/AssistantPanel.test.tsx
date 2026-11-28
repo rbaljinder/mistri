@@ -11,6 +11,7 @@ import { setAppRequestScope } from '../../../../kit/src/client/requestIdentity.j
 import { state } from '../../../../kit/src/client/core.js';
 import { installShell } from '../../../../kit/src/client/shellMode.js';
 import { registerPeek } from '../../../../kit/src/client/uiBridge.js';
+import { useAssistantContext } from './sdk/hooks.js';
 
 /* The App the panel sits in, set per test; the rest of appState is the real one. */
 const mocks = vi.hoisted(() => ({ app: null as unknown }));
@@ -1872,4 +1873,154 @@ test('Wave 4A/4B: Trace cost/model metrics, Eval total cost, live MCP server dis
   expect(screen.getByText('$0.0085')).toBeInTheDocument();
   expect(screen.getByText('Model')).toBeInTheDocument();
   expect(screen.getByText('gpt-4.1')).toBeInTheDocument();
+});
+
+test('Wave 5: useAssistantContext chips, lazy gallery/calendar blocks, and Run Monitor Usage & cost rollup strip', async () => {
+  const user = userEvent.setup();
+  mocks.app = {
+    id: 'compass',
+    name: 'Compass',
+    resources: {},
+    views: {},
+    assistant: {
+      blocks: ['gallery', 'calendar', 'table'],
+      backgroundRuns: { maxConcurrent: 2, maxSteps: 6, presets: [], schedules: [], triggers: [] },
+    },
+  };
+
+  const turnBodies: Array<Record<string, unknown>> = [];
+
+  fetcher.mockImplementation(async (input, init) => {
+    const path = new URL(String(input), 'http://localhost').pathname;
+    const method = (init?.method ?? 'GET').toUpperCase();
+    const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+    if (path === '/api/assistant') return json({ conversations: [], ready: true });
+    if (path === '/api/assistant/turn' && method === 'POST') {
+      turnBodies.push(body as Record<string, unknown>);
+      return events(
+        ['conversation', { id: 'conv-w5', title: 'Gallery & Calendar' }],
+        [
+          'block',
+          {
+            type: 'block',
+            id: 'b-gallery',
+            block: {
+              kind: 'gallery',
+              title: 'Featured Properties',
+              table: 'property',
+              items: [
+                {
+                  label: 'Harbor Loft',
+                  detail: 'San Francisco · $2.4M',
+                  badge: 'Available',
+                  image: 'https://cdn.example.test/harbor.png',
+                  address: '/compass/property/1',
+                },
+              ],
+            },
+          },
+        ],
+        [
+          'block',
+          {
+            type: 'block',
+            id: 'b-calendar',
+            block: {
+              kind: 'calendar',
+              title: 'Upcoming Inspections',
+              table: 'inspection',
+              dateField: 'scheduled_on',
+              items: [
+                {
+                  label: 'Roof Assessment',
+                  date: '2026-12-03',
+                  detail: 'Harbor Loft',
+                  badge: 'Confirmed',
+                  address: '/compass/inspection/9',
+                },
+              ],
+            },
+          },
+        ],
+        ['text', { delta: 'Rendered both blocks.' }],
+        ['done', { state: 'idle' }],
+      );
+    }
+    if (path === '/api/assistant/runs') return json({ runs: [], ready: true });
+    if (path === '/api/assistant/usage') {
+      return json({
+        usage: {
+          conversations: 2,
+          calls: 4,
+          tokensIn: 8000,
+          tokensOut: 2000,
+          cacheReadTokens: 4800,
+          cacheWriteTokens: 400,
+          totalTokens: 10000,
+          cacheHitRate: 0.6,
+          estimatedCostUsd: 0.0186,
+          byModel: [
+            {
+              provider: 'openai',
+              model: 'gpt-4.1',
+              calls: 3,
+              tokensIn: 6000,
+              tokensOut: 1500,
+              cacheReadTokens: 4000,
+              cacheWriteTokens: 0,
+              totalTokens: 7500,
+              estimatedCostUsd: 0.0142,
+            },
+            {
+              provider: 'anthropic',
+              model: 'claude-sonnet-4-5',
+              calls: 1,
+              tokensIn: 2000,
+              tokensOut: 500,
+              cacheReadTokens: 800,
+              cacheWriteTokens: 400,
+              totalTokens: 2500,
+              estimatedCostUsd: 0.0044,
+            },
+          ],
+        },
+      });
+    }
+    return json({ error: 'unexpected' }, 404);
+  });
+
+  function ContextHost() {
+    useAssistantContext({
+      label: 'Q3 Enterprise · 4 deals',
+      summary: 'Filtered to stage=proposal',
+    });
+    return <AssistantPanel app="compass" record={false} onClose={() => {}} />;
+  }
+
+  draw(<ContextHost />);
+
+  // 1. Composer shows the live useAssistantContext chip and forwards pageContext on submit.
+  expect(await screen.findByText('Q3 Enterprise · 4 deals')).toBeInTheDocument();
+  const box = screen.getByRole('textbox', { name: 'Message the assistant' });
+  await user.type(box, 'Show gallery and schedule{Enter}');
+
+  // 2. Lazy gallery & calendar blocks render cleanly via AssistantRichBlocks.
+  expect(await screen.findByText('Featured Properties', {}, { timeout: 2500 })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Harbor Loft' })).toHaveAttribute('href', '/compass/property/1');
+  expect(screen.getByText('Upcoming Inspections')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Roof Assessment' })).toHaveAttribute('href', '/compass/inspection/9');
+  expect(turnBodies[0]?.pageContext).toEqual([{ label: 'Q3 Enterprise · 4 deals', summary: 'Filtered to stage=proposal' }]);
+
+  // Dismissing the context chip hides it immediately.
+  await user.click(screen.getByRole('button', { name: 'Leave out Q3 Enterprise · 4 deals' }));
+  expect(screen.queryByText('Q3 Enterprise · 4 deals')).not.toBeInTheDocument();
+
+  // 3. Run Monitor renders hairline Usage & cost rollup strip from /api/assistant/usage.
+  await user.click(await screen.findByRole('button', { name: 'Runs' }));
+  expect(await screen.findByText('Usage & cost', {}, { timeout: 2500 })).toBeInTheDocument();
+  expect(screen.getByText('10.0k')).toBeInTheDocument();
+  expect(screen.getByText('60%')).toBeInTheDocument();
+  expect(screen.getByText('$0.0186')).toBeInTheDocument();
+  expect(screen.getByText('openai · gpt-4.1 · $0.0142')).toBeInTheDocument();
+  expect(screen.getByText('anthropic · claude-sonnet-4-5 · $0.0044')).toBeInTheDocument();
 });

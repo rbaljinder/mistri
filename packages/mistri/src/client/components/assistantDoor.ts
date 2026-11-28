@@ -53,3 +53,44 @@ export function openAssistantDoor(handoff: AssistantHandoff): boolean {
   held(handoff);
   return true;
 }
+
+/** Structured client-side UI state surfaced by a page (`useAssistantContext`) as a dismissible composer chip. */
+export interface AssistantContextEntry {
+  id: string;
+  label: string;
+  summary: string;
+}
+
+const contexts = new Map<string, AssistantContextEntry>();
+const contextListeners = new Set<() => void>();
+let contextSnapshot: readonly AssistantContextEntry[] = [];
+
+const notifyContexts = () => {
+  contextSnapshot = [...contexts.values()];
+  for (const listener of [...contextListeners]) listener();
+};
+
+/** Register or update a live page context chip; the returned cleanup removes it on unmount. */
+export function registerAssistantContext(id: string, entry: { label: string; summary: string }): () => void {
+  const label = entry.label.replace(/\s+/g, ' ').trim().slice(0, 80);
+  const summary = entry.summary.replace(/\s+/g, ' ').trim().slice(0, 400);
+  if (!label || !summary) return () => {};
+  contexts.set(id, { id, label, summary });
+  notifyContexts();
+  return () => {
+    if (contexts.delete(id)) notifyContexts();
+  };
+}
+
+/** Subscribes to mounted `useAssistantContext` providers (`useSyncExternalStore`). */
+export function subscribeAssistantContext(listener: () => void): () => void {
+  contextListeners.add(listener);
+  return () => {
+    contextListeners.delete(listener);
+  };
+}
+
+/** Cached immutable snapshot of currently active page context entries. */
+export function assistantContextSnapshot(): readonly AssistantContextEntry[] {
+  return contextSnapshot;
+}

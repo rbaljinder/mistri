@@ -293,6 +293,104 @@ export function summarizeTrace(
   };
 }
 
+interface ModelUsageBreakdownEntry {
+  provider: string;
+  model: string;
+  calls: number;
+  tokensIn: number;
+  tokensOut: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  totalTokens: number;
+  estimatedCostUsd: number;
+}
+
+interface AssistantUsageRollup {
+  conversations: number;
+  calls: number;
+  tokensIn: number;
+  tokensOut: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  totalTokens: number;
+  cacheHitRate: number;
+  estimatedCostUsd: number;
+  byModel: ModelUsageBreakdownEntry[];
+}
+
+/** Aggregate per-provider and per-model token, prompt-cache, and estimated USD cost rollups across stored events. */
+export function summarizeUsageByModel(eventBatches: ReadonlyArray<readonly StoredEvent[]>): AssistantUsageRollup {
+  const map = new Map<string, ModelUsageBreakdownEntry>();
+  let calls = 0;
+  let tokensIn = 0;
+  let tokensOut = 0;
+  let cacheReadTokens = 0;
+  let cacheWriteTokens = 0;
+  let estimatedCostUsd = 0;
+
+  for (const events of eventBatches) {
+    for (const ev of events) {
+      if (ev.kind !== 'assistant') continue;
+      const body = ev.body as Record<string, unknown>;
+      const usage = body.usage as { input?: number; output?: number; cacheRead?: number; cacheWrite?: number } | undefined;
+      if (!usage) continue;
+      const evModel = typeof body.model === 'string' && body.model.trim() ? body.model.trim() : 'claude-sonnet-5-5';
+      const parsed = parseModelTarget(evModel);
+      const inp = usage.input ?? 0;
+      const out = usage.output ?? 0;
+      const cRead = usage.cacheRead ?? 0;
+      const cWrite = usage.cacheWrite ?? 0;
+      const stepIn = inp + cRead + cWrite;
+      const stepCost = estimateModelCostUsd(evModel, { input: inp, output: out, cacheRead: cRead, cacheWrite: cWrite });
+
+      calls += 1;
+      tokensIn += stepIn;
+      tokensOut += out;
+      cacheReadTokens += cRead;
+      cacheWriteTokens += cWrite;
+      estimatedCostUsd += stepCost;
+
+      const key = `${parsed.provider}:${parsed.model}`;
+      const existing = map.get(key) ?? {
+        provider: parsed.provider,
+        model: parsed.model,
+        calls: 0,
+        tokensIn: 0,
+        tokensOut: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        totalTokens: 0,
+        estimatedCostUsd: 0,
+      };
+      existing.calls += 1;
+      existing.tokensIn += stepIn;
+      existing.tokensOut += out;
+      existing.cacheReadTokens += cRead;
+      existing.cacheWriteTokens += cWrite;
+      existing.totalTokens += stepIn + out;
+      existing.estimatedCostUsd += stepCost;
+      map.set(key, existing);
+    }
+  }
+
+  const byModel = [...map.values()]
+    .map((entry) => ({ ...entry, estimatedCostUsd: Math.round(entry.estimatedCostUsd * 1_000_000) / 1_000_000 }))
+    .sort((a, b) => b.estimatedCostUsd - a.estimatedCostUsd || b.totalTokens - a.totalTokens);
+
+  return {
+    conversations: eventBatches.length,
+    calls,
+    tokensIn,
+    tokensOut,
+    cacheReadTokens,
+    cacheWriteTokens,
+    totalTokens: tokensIn + tokensOut,
+    cacheHitRate: tokensIn > 0 ? Math.round((cacheReadTokens / tokensIn) * 1000) / 1000 : 0,
+    estimatedCostUsd: Math.round(estimatedCostUsd * 1_000_000) / 1_000_000,
+    byModel,
+  };
+}
+
 /** Ephemeral in-memory AssistantStore used exclusively for isolated eval runs so user conversation history is untouched. */
 function createEphemeralEvalStore(backing: AssistantStore): {
   store: AssistantStore;

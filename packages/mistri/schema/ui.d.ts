@@ -580,6 +580,11 @@ export declare function useAssistant(): {
   readonly offered: boolean;
   open(options?: { about?: { table: string; id: string | number }; text?: string; mode?: 'sidebar' | 'floating' | 'fullscreen' }): boolean;
 };
+/** Register live page state (such as active filters or selected rows) as an inspectable, dismissible context chip
+    in the assistant composer while this component is mounted. Pass `null` or `undefined` to clear it. */
+export declare function useAssistantContext(
+  entry: { readonly label: string; readonly summary: string } | null | undefined,
+): void;
 /** A pointer event's position inside an element, in layout pixels, from the element's top-left: `layoutPoint(event, column)`.
     The density zoom makes client coordinates and a drawn box differ from the pixels a page styles in; this is the one ruler the shell
     measures with, so hit-testing and dragging place what they find where the pointer is. */

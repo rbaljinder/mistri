@@ -41,6 +41,7 @@ async function fixture(
     rows<T = Record<string, unknown>>(sql: string): T[];
     runs(): number;
   }) => Promise<void>,
+  assistantConfig: Record<string, unknown> = {},
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'mistri-assistant-proposals-'));
   const file = join(directory, 'lending.db');
@@ -73,7 +74,7 @@ async function fixture(
       views: { loans: { kind: 'list', from: 'loan' } },
       home: 'loans',
       nav: ['loans'],
-      assistant: {},
+      assistant: assistantConfig,
     },
     'assistant proposals fixture',
   );
@@ -265,4 +266,39 @@ test('no route takes a client’s propose step: a body shaped like the host’s 
     }
     assert.deepEqual(rows(`SELECT id FROM "${tables.proposal}"`), []);
   });
+});
+
+test('Wave 5B: autoApproveCommands runs named low-risk commands directly under viewer grants while keeping other writes confirmation-gated', async () => {
+  await fixture(
+    script,
+    async ({ turn, rows, runs }) => {
+      // 1. Reviewer (granted `assign`) auto-executes `loan.assign` directly through /api/commands/execute — no review queue row!
+      const auto = await turn('account-ada', { text: 'assign the corner shop' });
+      assert.equal(auto.status, 200, JSON.stringify(auto.body));
+      assert.deepEqual(of(auto.events, 'proposal'), [], 'Auto-approved command should not emit a confirmation card');
+      const autoStep = of(auto.events, 'step').find((step) => step.tool === 'run');
+      assert.ok(autoStep && !autoStep.failed, JSON.stringify(auto.events));
+      assert.match(autoStep.label, /Auto-ran Assign: Corner shop/);
+      assert.equal(of(auto.events, 'done').at(-1).state, 'idle');
+      assert.equal(runs(), 1, 'Business command handler must have executed directly');
+      assert.deepEqual(rows(`SELECT loan_id, reviewer FROM assignment`), [{ loan_id: 1, reviewer: 'Dee' }]);
+      assert.deepEqual(rows(`SELECT id FROM "${tables.proposal}"`), [], 'No pending proposal should be queued');
+
+      // 2. Viewer (NOT granted `assign`) is still refused — autoApproveCommands never widens authority!
+      const denied = await turn('account-cy', { text: 'assign the corner shop' });
+      assert.equal(denied.status, 200);
+      assert.deepEqual(of(denied.events, 'proposal'), []);
+      const deniedStep = of(denied.events, 'step').find((step) => step.tool === 'run');
+      assert.equal(deniedStep?.failed, true);
+      assert.equal(runs(), 1, 'Unauthorized viewer must never trigger auto-execution');
+
+      // 3. Non-allowlisted fixed action (`memo.close`) still pauses for confirmation as before.
+      const convId = of(auto.events, 'conversation')[0].id;
+      const gated = await turn('account-ada', { conversation: convId, text: 'close the memo' });
+      const [waiting] = of(gated.events, 'proposal');
+      assert.equal(waiting?.proposal.action, 'close');
+      assert.equal(of(gated.events, 'done').at(-1).state, 'awaiting');
+    },
+    { autoApproveCommands: ['loan.assign'] },
+  );
 });

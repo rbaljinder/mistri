@@ -3851,6 +3851,8 @@ export declare function experiment<const E extends ExperimentDeclaration>(declar
 export interface AssistantDeclaration {
   /** What it is for and how it answers, appended to the platform's own rules. */
   readonly instructions?: string;
+  /** Optional role-specific guidance keyed by declared role name (server-only; appended only when the viewer holds that role). */
+  readonly roleInstructions?: Readonly<Record<string, string>>;
   /** Questions an empty conversation offers, each one line the person sends with a press: a bare line everywhere,
    * `{ text, views, records }` only in those views' rooms or on a record of those tables, `roles` only to people
    * holding one of them. At most six in one place for any one person. */
@@ -3873,8 +3875,10 @@ export interface AssistantDeclaration {
   readonly tools?: readonly ('find' | 'describe' | 'query' | 'show' | 'run')[];
   /** Verbs it may never propose, as `'resource.action'`, or `'resource.new'` for the New form. */
   readonly exclude?: readonly `${string}.${string}`[];
+  /** Named low-risk business commands (`'commandId'` or `'resource.actionId'`) that execute directly under the viewer's own grants & row policy without pausing for manual confirmation. */
+  readonly autoApproveCommands?: readonly string[];
   /** The blocks it may draw; absent, all of them. */
-  readonly blocks?: readonly ('table' | 'metric' | 'metrics' | 'chart' | 'breakdown' | 'funnel' | 'board' | 'timeline' | 'record' | 'callout' | 'tabs')[];
+  readonly blocks?: readonly ('table' | 'metric' | 'metrics' | 'chart' | 'breakdown' | 'funnel' | 'board' | 'timeline' | 'gallery' | 'calendar' | 'record' | 'callout' | 'tabs')[];
   /** `'panel'` beside every room; `'record'` also takes the open record as its context; `'page'` gives it a room
    * of its own at `/{app}/assistant`, which nav places by the word `'assistant'` (at the menu's end where it does not).
    * Absent, the panel and the record. */
@@ -4154,7 +4158,7 @@ export interface AssistantAgentDeclaration {
   /** Additional verbs this agent may never propose (`resource.action` or `resource.new`). */
   readonly exclude?: readonly `${string}.${string}`[];
   /** Narrowing of the top-level assistant blocks. */
-  readonly blocks?: readonly ('table' | 'metric' | 'metrics' | 'chart' | 'breakdown' | 'funnel' | 'board' | 'timeline' | 'record' | 'callout' | 'tabs')[];
+  readonly blocks?: readonly ('table' | 'metric' | 'metrics' | 'chart' | 'breakdown' | 'funnel' | 'board' | 'timeline' | 'gallery' | 'calendar' | 'record' | 'callout' | 'tabs')[];
   /** Subset of `assistant.customBlocks` keys this agent may draw. */
   readonly customBlocks?: readonly string[];
   /** Sibling agent keys this agent may delegate bounded analysis sub-tasks to via the `delegate` tool. */

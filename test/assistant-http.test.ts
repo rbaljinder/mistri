@@ -2759,3 +2759,199 @@ test('Wave 4B: progressive skills (load_skill) and live MCP server tools/list di
     await new Promise<void>((resolve) => mockMcp.close(() => resolve()));
   }
 });
+
+test('Wave 5A: pageContext chips, gallery/calendar blocks with safe URL filtering, and resumable Last-Event-ID SSE', async () => {
+  await fixture(
+    async ({ as, db, turn, post, url, requests }) => {
+      as('ann');
+
+      // Seed image URLs (one valid HTTPS, one malicious javascript:) for gallery validation.
+      db.prepare('UPDATE lead SET notes = ? WHERE id = 1').run('https://cdn.example.test/acme-cover.png');
+      db.prepare('UPDATE lead SET notes = ? WHERE id = 2').run('javascript:alert(1)');
+
+      // 1. Invalid pageContext (> 5 entries or missing summary) is rejected with 400.
+      const badCtx = await turn({
+        text: 'Summarize leads',
+        pageContext: Array.from({ length: 6 }, (_, i) => ({ label: `Chip ${i}`, summary: 'Active filter' })),
+      });
+      assert.equal(badCtx.status, 400);
+
+      // 2. Valid pageContext chips flow into the turn prompt & gallery strips unsafe javascript: URLs.
+      const galleryTurn = await turn({
+        text: 'Show lead gallery',
+        pageContext: [
+          {
+            id: 'pipeline-filter',
+            label: 'Q3 Enterprise · 2 leads',
+            summary: 'Filtered to status in (new, working)',
+          },
+        ],
+      });
+      assert.equal(galleryTurn.status, 200);
+      const firstUserMsg = requests[0]?.messages.find((m) => m.role === 'user');
+      const userContent = typeof firstUserMsg?.content === 'string' ? firstUserMsg.content : JSON.stringify(firstUserMsg?.content);
+      assert.match(userContent, /Q3 Enterprise · 2 leads/);
+      assert.match(userContent, /Filtered to status in \(new, working\)/);
+
+      const galleryBlock = of(galleryTurn.events, 'block').find((b) => b.block?.kind === 'gallery')?.block;
+      assert.ok(galleryBlock, `Expected gallery block, got ${JSON.stringify(galleryTurn.events)}`);
+      assert.equal(galleryBlock.items.length, 1, 'Unsafe javascript: URL must be filtered out');
+      assert.equal(galleryBlock.items[0].label, 'Acme Corp');
+      assert.equal(galleryBlock.items[0].image, 'https://cdn.example.test/acme-cover.png');
+      assert.ok(galleryBlock.items[0].address?.startsWith(`/${appId}/`));
+
+      // 3. Calendar block sorts chronologically ascending and emits canonical record addresses.
+      db.prepare('UPDATE lead SET notes = ? WHERE id = 1').run('2026-12-10');
+      db.prepare('UPDATE lead SET notes = ? WHERE id = 2').run('2026-12-03');
+      const calTurn = await turn({ text: 'Show lead calendar' });
+      assert.equal(calTurn.status, 200);
+      const calBlock = of(calTurn.events, 'block').find((b) => b.block?.kind === 'calendar')?.block;
+      assert.ok(calBlock, `Expected calendar block, got ${JSON.stringify(calTurn.events)}`);
+      assert.equal(calBlock.dateField, 'notes');
+      assert.deepEqual(
+        calBlock.items.map((item: { label: string; date: string }) => [item.label, item.date]),
+        [
+          ['Globex', '2026-12-03'],
+          ['Acme Corp', '2026-12-10'],
+        ],
+      );
+      assert.ok(calBlock.items[0].address?.startsWith(`/${appId}/`));
+
+      // 4. Resumable SSE on background runs emits monotonic `id: <seq>` frames and honors Last-Event-ID / ?after=.
+      const launched = await post('/api/assistant/runs', { app: appId, prompt: 'Run quick audit' });
+      assert.equal(launched.status, 202);
+      const runId = launched.body.run.id as string;
+
+      // Wait until the background run finishes so buffered events sit in recentRuns.
+      for (let attempt = 0; attempt < 40; attempt++) {
+        const detail = await fetch(url(`/api/assistant/runs/detail?app=${appId}&id=${runId}`));
+        const json = (await detail.json()) as { run?: { status: string } };
+        if (json.run?.status === 'completed') break;
+        await new Promise((r) => setTimeout(r, 40));
+      }
+
+      const fullStreamRes = await fetch(url(`/api/assistant/runs/stream?app=${appId}&id=${runId}&after=0`));
+      assert.equal(fullStreamRes.status, 200);
+      const fullText = await fullStreamRes.text();
+      const parseWithIds = (raw: string) =>
+        raw
+          .split('\n\n')
+          .filter((chunk) => chunk.trim() && !chunk.startsWith(':'))
+          .map((chunk) => ({
+            id: /^id: (\d+)$/m.exec(chunk)?.[1] ? Number(/^id: (\d+)$/m.exec(chunk)![1]) : undefined,
+            event: /^event: (.*)$/m.exec(chunk)?.[1] ?? '',
+          }));
+      const fullFrames = parseWithIds(fullText);
+      const sequenced = fullFrames.filter((f) => typeof f.id === 'number');
+      assert.ok(sequenced.length >= 2, `Expected sequenced SSE frames, got ${JSON.stringify(fullFrames)}`);
+      for (let i = 1; i < sequenced.length; i++) {
+        assert.ok(sequenced[i]!.id! > sequenced[i - 1]!.id!, 'SSE frame ids must be strictly increasing');
+      }
+
+      const cursor = sequenced[0]!.id!;
+      const resumedRes = await fetch(url(`/api/assistant/runs/stream?app=${appId}&id=${runId}`), {
+        headers: { 'Last-Event-ID': String(cursor) },
+      });
+      assert.equal(resumedRes.status, 200);
+      const resumedFrames = parseWithIds(await resumedRes.text()).filter((f) => typeof f.id === 'number');
+      assert.ok(resumedFrames.length >= 1, 'Resumed SSE stream should replay subsequent frames');
+      assert.ok(
+        resumedFrames.every((f) => f.id! > cursor),
+        `Every replayed frame id must exceed Last-Event-ID (${cursor}), got ${JSON.stringify(resumedFrames)}`,
+      );
+    },
+    {
+      script: {
+        turns: [
+          {
+            when: 'Show lead gallery',
+            steps: [
+              {
+                tools: [
+                  { name: 'show', input: { kind: 'gallery', resource: 'lead', title: 'Lead Covers', image: 'notes', show: ['status'] } },
+                ],
+              },
+              { text: 'Here is the lead gallery.' },
+            ],
+          },
+          {
+            when: 'Show lead calendar',
+            steps: [
+              {
+                tools: [
+                  {
+                    name: 'show',
+                    input: { kind: 'calendar', resource: 'lead', title: 'Upcoming Milestones', date: 'notes', show: ['status'] },
+                  },
+                ],
+              },
+              { text: 'Here is the chronological schedule.' },
+            ],
+          },
+          {
+            when: 'Run quick audit',
+            steps: [{ text: 'Background audit completed cleanly.' }],
+          },
+        ],
+      },
+      assistant: {
+        backgroundRuns: { maxConcurrent: 2, maxSteps: 6 },
+      },
+    },
+  );
+});
+
+test('Wave 5B: roleInstructions per-role scoping (never leaked to /api/app) and /api/assistant/usage per-model cost & cache rollups', async () => {
+  await fixture(
+    async ({ as, get, turn, requests }) => {
+      // 1. /api/app strips roleInstructions completely so no role learns another role's guidance.
+      as('ann');
+      const appPayload = await get(`/api/app?app=${appId}`);
+      assert.equal(appPayload.status, 200);
+      assert.equal(appPayload.body.app.assistant.roleInstructions, undefined);
+
+      // 2. Rep ('ann') sees ONLY rep guidance in system prompt; viewer sees ONLY viewer guidance.
+      const repTurn = await turn({ text: 'Check quarterly priorities' });
+      assert.equal(repTurn.status, 200);
+      assert.match(requests[0]!.system, /REP-ONLY-GUIDANCE: Focus on outreach/);
+      assert.doesNotMatch(requests[0]!.system, /VIEWER-ONLY-GUIDANCE/);
+
+      as('viewer');
+      const viewerTurn = await turn({ text: 'Check quarterly priorities' });
+      assert.equal(viewerTurn.status, 200);
+      assert.match(requests[1]!.system, /VIEWER-ONLY-GUIDANCE: Provide read-only executive summaries/);
+      assert.doesNotMatch(requests[1]!.system, /REP-ONLY-GUIDANCE/);
+
+      // 3. GET /api/assistant/usage aggregates calls, tokens, cacheHitRate, estimatedCostUsd, and byModel for the signed-in person.
+      as('ann');
+      const usageRes = await get(`/api/assistant/usage?app=${appId}`);
+      assert.equal(usageRes.status, 200);
+      const usage = usageRes.body.usage;
+      assert.equal(usage.calls, 1);
+      assert.equal(usage.tokensIn, 3000); // input (1000) + cacheRead (1500) + cacheWrite (500)
+      assert.equal(usage.tokensOut, 400);
+      assert.equal(usage.totalTokens, 3400);
+      assert.equal(usage.cacheReadTokens, 1500);
+      assert.equal(usage.cacheHitRate, 0.5);
+      assert.ok(usage.estimatedCostUsd > 0, `Expected positive USD estimate, got ${usage.estimatedCostUsd}`);
+      assert.equal(usage.byModel.length, 1);
+      assert.equal(usage.byModel[0].provider, 'openai');
+      assert.equal(usage.byModel[0].model, 'gpt-4.1');
+      assert.equal(usage.byModel[0].calls, 1);
+    },
+    {
+      usage: { input: 1000, output: 400, cacheRead: 1500, cacheWrite: 500 },
+      script: {
+        turns: [{ when: 'Check quarterly priorities', steps: [{ text: 'Priorities summarized.' }] }],
+      },
+      assistant: {
+        provider: 'openai',
+        model: 'gpt-4.1',
+        roleInstructions: {
+          rep: 'REP-ONLY-GUIDANCE: Focus on outreach and next pipeline steps.',
+          viewer: 'VIEWER-ONLY-GUIDANCE: Provide read-only executive summaries.',
+        },
+      },
+    },
+  );
+});
