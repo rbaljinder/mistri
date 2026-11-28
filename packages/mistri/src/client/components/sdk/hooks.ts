@@ -11,7 +11,7 @@
  * Reads go through the page's one query cache, keyed by the reader, so a
  * sign-out or a switch of account never serves one reader's rows to another.
  */
-import { useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useContext, useEffect, useId, useMemo, useReducer, useRef, useState, useSyncExternalStore } from 'react';
 import type { Tone } from '@mistriwork/ui';
 import { keepPreviousData, useInfiniteQuery, useQuery, type UseQueryResult } from '@tanstack/react-query';
 import {
@@ -29,7 +29,7 @@ import {
 import { minorFigure } from '@mistriwork/engine/shared/money.js';
 import { formatColumnValue } from '@mistriwork/kit/client/components/valueModel.js';
 import { herePath } from '@mistriwork/kit/client/addressMount.js';
-import { subscribeAssistantDoor } from '../assistantDoor.js';
+import { registerAssistantContext, subscribeAssistantDoor } from '../assistantDoor.js';
 import { notePageLoad } from '../../pageLoadHints.js';
 import {
   UiPageContext,
@@ -660,6 +660,21 @@ export function useAssistant(): {
       });
     },
   };
+}
+
+/**
+ * Register live client-side page state (such as active filters, selected rows, or a summary metric) as a
+ * dismissible context chip in the assistant composer while this component stays mounted. Pass `null` or
+ * `undefined` to clear it. Never grants extra authority: sent strictly as user-visible UI context.
+ */
+export function useAssistantContext(entry: { readonly label: string; readonly summary: string } | null | undefined): void {
+  const id = useId();
+  const label = entry?.label ?? '';
+  const summary = entry?.summary ?? '';
+  useEffect(() => {
+    if (!label.trim() || !summary.trim()) return;
+    return registerAssistantContext(id, { label, summary });
+  }, [id, label, summary]);
 }
 
 /**

@@ -17,14 +17,35 @@ import { resolveAssistantModel, type AssistantModel, type ModelTool } from './as
 import type { ToolSession } from './assistantTools.js';
 import { continueTurn, type Emit } from './assistantTurn.js';
 
-interface ActiveEntry {
-  controller: AbortController;
-  subscribers: Set<Emit>;
+interface BufferedRunEvent {
+  seq: number;
+  event: string;
+  data: unknown;
 }
 
+type RunSubscriber = (event: string, data: unknown, seq?: number) => void;
+
+interface ActiveEntry {
+  controller: AbortController;
+  subscribers: Set<RunSubscriber>;
+  nextSeq: number;
+  buffer: BufferedRunEvent[];
+}
+
+const MAX_BUFFERED_EVENTS = 500;
+const RECENT_RETENTION_MS = 60_000;
+
 const activeRuns = new Map<string, ActiveEntry>();
+const recentRuns = new Map<string, { expiresAt: number; buffer: BufferedRunEvent[] }>();
 
 const runKey = (owner: AssistantOwner, runId: string) => JSON.stringify([owner.app, owner.tenant, owner.account, runId]);
+
+function pruneRecentRuns(): void {
+  const now = Date.now();
+  for (const [key, entry] of recentRuns) {
+    if (entry.expiresAt <= now) recentRuns.delete(key);
+  }
+}
 
 interface LaunchRunParams {
   store: AssistantStore;
@@ -48,14 +69,39 @@ export function isBackgroundRunLive(owner: AssistantOwner, runId: string): boole
   return activeRuns.has(runKey(owner, runId));
 }
 
-/** Attach an SSE listener to an active background run. Returns an unsubscribe handle, or `null` if not live. */
-export function subscribeBackgroundRun(owner: AssistantOwner, runId: string, listener: Emit): (() => void) | null {
-  const entry = activeRuns.get(runKey(owner, runId));
-  if (!entry) return null;
-  entry.subscribers.add(listener);
-  return () => {
-    entry.subscribers.delete(listener);
-  };
+/**
+ * Attach an SSE listener to an active (or recently completed) background run, optionally replaying
+ * all buffered events after `afterSeq` (from HTTP `Last-Event-ID` or `?after=` cursor).
+ * Returns an unsubscribe handle, or `null` if no active/recent stream exists.
+ */
+export function subscribeBackgroundRun(
+  owner: AssistantOwner,
+  runId: string,
+  listener: RunSubscriber,
+  afterSeq?: number,
+): (() => void) | null {
+  pruneRecentRuns();
+  const key = runKey(owner, runId);
+  const entry = activeRuns.get(key);
+  if (entry) {
+    if (afterSeq !== undefined && Number.isFinite(afterSeq) && afterSeq >= 0) {
+      for (const item of entry.buffer) {
+        if (item.seq > afterSeq) listener(item.event, item.data, item.seq);
+      }
+    }
+    entry.subscribers.add(listener);
+    return () => {
+      entry.subscribers.delete(listener);
+    };
+  }
+  const recent = recentRuns.get(key);
+  if (recent && afterSeq !== undefined && Number.isFinite(afterSeq) && afterSeq >= 0) {
+    for (const item of recent.buffer) {
+      if (item.seq > afterSeq) listener(item.event, item.data, item.seq);
+    }
+    return () => {};
+  }
+  return null;
 }
 
 /** Cancel a running or awaiting background run. Aborts in-flight model/tool calls and marks the run `cancelled`. */
@@ -77,10 +123,14 @@ export async function cancelBackgroundRun(store: AssistantStore, owner: Assistan
     now,
   );
   if (entry && updated) {
-    for (const sub of entry.subscribers) {
-      sub('run_status', { run: { ...updated, live: false } });
-      sub('done', { state: 'cancelled' });
-    }
+    const push = (event: string, data: unknown) => {
+      const seq = ++entry.nextSeq;
+      entry.buffer.push({ seq, event, data });
+      if (entry.buffer.length > MAX_BUFFERED_EVENTS) entry.buffer.shift();
+      for (const sub of entry.subscribers) sub(event, data, seq);
+    };
+    push('run_status', { run: { ...updated, live: false } });
+    push('done', { state: 'cancelled' });
   }
   return updated;
 }
@@ -94,13 +144,17 @@ export function launchBackgroundRun(params: LaunchRunParams): void {
   const { store, owner, run } = params;
   const key = runKey(owner, run.id);
   const controller = new AbortController();
-  const entry: ActiveEntry = { controller, subscribers: new Set() };
+  const entry: ActiveEntry = { controller, subscribers: new Set(), nextSeq: 0, buffer: [] };
+  recentRuns.delete(key);
   activeRuns.set(key, entry);
 
   const broadcast: Emit = (event, data) => {
+    const seq = ++entry.nextSeq;
+    entry.buffer.push({ seq, event, data });
+    if (entry.buffer.length > MAX_BUFFERED_EVENTS) entry.buffer.shift();
     for (const sub of entry.subscribers) {
       try {
-        sub(event, data);
+        sub(event, data, seq);
       } catch {
         /* A closed subscriber never disrupts the background run. */
       }
@@ -207,6 +261,10 @@ export function launchBackgroundRun(params: LaunchRunParams): void {
       if (finalRow) broadcast('run_status', { run: { ...finalRow, live: false } });
       broadcast('done', { state: finalStatus });
     } finally {
+      if (entry.buffer.length) {
+        recentRuns.set(key, { expiresAt: Date.now() + RECENT_RETENTION_MS, buffer: entry.buffer });
+        pruneRecentRuns();
+      }
       activeRuns.delete(key);
     }
   })();

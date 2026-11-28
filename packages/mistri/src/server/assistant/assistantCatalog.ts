@@ -338,6 +338,7 @@ export function toolSpecs(
     measure: { type: 'string' },
     by: { type: 'string' },
     date: { type: 'string' },
+    image: { type: 'string' },
     lanes: { type: 'array', items: { type: 'string' } },
     shape: { enum: ['bar', 'line', 'donut', 'waterfall', 'treemap', 'heatmap', 'scatter'] },
     tone: { enum: ['info', 'good', 'warning', 'critical'] },
@@ -383,6 +384,7 @@ export function toolSpecs(
       description:
         'Draw a validated UI block: table (query, show, sort, limit), metric (measure), metrics (items of {title, resource, measure, query}), ' +
         'chart/breakdown (measure, by, shape), funnel (items of {label, query}), board (by, show, lanes), timeline (date, show, limit), ' +
+        'gallery (image, show, limit), calendar (date, show, limit), ' +
         `record (id), callout (tone, body), or tabs (items of {label, block})${hasCustom ? ', or custom (name, props)' : ''}.`,
       input_schema: {
         type: 'object',

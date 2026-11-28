@@ -37,6 +37,19 @@ export type AssistantBlock =
       table: string;
       items: Array<{ label: string; when: string; detail?: string; badge?: string; address?: string }>;
     }
+  | {
+      kind: 'gallery';
+      title?: string;
+      table: string;
+      items: Array<{ label: string; image: string; detail?: string; badge?: string; address?: string }>;
+    }
+  | {
+      kind: 'calendar';
+      title?: string;
+      table: string;
+      dateField: string;
+      items: Array<{ label: string; date: string; detail?: string; badge?: string; address?: string }>;
+    }
   | { kind: 'callout'; tone: 'info' | 'good' | 'warning' | 'critical'; title?: string; body: string }
   | { kind: 'tabs'; title?: string; tabs: Array<{ id: string; label: string; block: AssistantBlock }> }
   | { kind: 'record'; table: string; key: Record<string, unknown>; title: string; values: Record<string, unknown>; address?: string }
@@ -111,6 +124,7 @@ interface AskEvidence {
 export interface StreamEvent {
   event: string;
   data: Record<string, unknown>;
+  id?: number;
 }
 
 const record = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -212,14 +226,18 @@ export async function readEvents(body: ReadableStream<Uint8Array>, onEvent: (eve
       const chunk = buffer.slice(0, end);
       buffer = buffer.slice(end + 2);
       let event = 'message';
+      let id: number | undefined;
       const data: string[] = [];
       for (const line of chunk.split('\n')) {
         if (line.startsWith('event:')) event = line.slice(6).trim();
-        else if (line.startsWith('data:')) data.push(line.slice(5).trimStart());
+        else if (line.startsWith('id:')) {
+          const raw = line.slice(3).trim();
+          if (/^\d+$/.test(raw)) id = Number(raw);
+        } else if (line.startsWith('data:')) data.push(line.slice(5).trimStart());
       }
       try {
         const parsed: unknown = JSON.parse(data.join('\n'));
-        if (record(parsed)) onEvent({ event, data: parsed });
+        if (record(parsed)) onEvent({ event, data: parsed, ...(id !== undefined ? { id } : {}) });
       } catch {
         /* Not an event this panel reads. */
       }
@@ -534,18 +552,35 @@ export async function stream(
   if (!finished && !signal.aborted) throw new ConnectionLost();
 }
 
-/** Attach to a live background run SSE stream (`GET /api/assistant/runs/stream?app=&id=`). */
+/** Attach to a live background run SSE stream (`GET /api/assistant/runs/stream?app=&id=`), resuming via `Last-Event-ID` on transient drops. */
 export async function streamRun(path: string, onEvent: (event: StreamEvent) => void, signal: AbortSignal): Promise<void> {
   const { url } = scopeApiRequest(path, undefined, state.activeConnection);
-  const res = await fetchServer(url, {
-    method: 'GET',
-    credentials: 'same-origin',
-    cache: 'no-store',
-    signal,
-    headers: { ...assistantHeaders() },
-  });
-  if (!res.ok || !res.body) {
-    throw Object.assign(new Error(`${res.status}`), { status: res.status });
+  let lastId: number | undefined;
+  let finished = false;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await fetchServer(url, {
+      method: 'GET',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      signal,
+      headers: {
+        ...assistantHeaders(),
+        ...(lastId !== undefined ? { 'last-event-id': String(lastId) } : {}),
+      },
+    });
+    if (!res.ok || !res.body) {
+      throw Object.assign(new Error(`${res.status}`), { status: res.status });
+    }
+    try {
+      await readEvents(res.body, (event) => {
+        if (event.id !== undefined) lastId = event.id;
+        if (event.event === 'done') finished = true;
+        onEvent(event);
+      });
+    } catch (err) {
+      if (signal.aborted || attempt === 1 || lastId === undefined) throw err;
+      continue;
+    }
+    if (finished || signal.aborted || lastId === undefined) return;
   }
-  await readEvents(res.body, onEvent);
 }

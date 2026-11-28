@@ -107,6 +107,33 @@ interface DiscoveredMcpServer {
   tools: DiscoveredMcpTool[];
 }
 
+interface ModelUsageEntry {
+  provider: string;
+  model: string;
+  calls: number;
+  tokensIn: number;
+  tokensOut: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  totalTokens: number;
+  estimatedCostUsd: number;
+}
+
+interface UsagePayload {
+  usage: {
+    conversations: number;
+    calls: number;
+    tokensIn: number;
+    tokensOut: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+    totalTokens: number;
+    cacheHitRate: number;
+    estimatedCostUsd: number;
+    byModel: ModelUsageEntry[];
+  };
+}
+
 interface AssistantRunMonitorProps {
   app: string;
   config: NonNullable<NonNullable<AppPayloadApp['assistant']>['backgroundRuns']>;
@@ -130,6 +157,13 @@ function formatDay(iso: string): string {
 function formatTokens(tokens: number): string {
   if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}k`;
   return String(tokens);
+}
+
+function formatUsageUsd(cost: number): string {
+  if (cost <= 0) return '$0.00';
+  if (cost < 0.001) return say('usageCostSubCent');
+  if (cost < 0.1) return `$${cost.toFixed(4)}`;
+  return `$${cost.toFixed(2)}`;
 }
 
 function statusWord(status: RunStatus): string {
@@ -291,6 +325,7 @@ export function AssistantRunMonitor({
   const owner = assistantOwner();
   const listKey = useMemo(() => ['assistant-runs', app, owner] as const, [app, owner]);
   const automationsKey = useMemo(() => ['assistant-automations', app, owner] as const, [app, owner]);
+  const usageKey = useMemo(() => ['assistant-usage', app, owner] as const, [app, owner]);
   const automationCount = (config.schedules?.length ?? 0) + (config.triggers?.length ?? 0);
   const evalList = assistant.evals ?? [];
   const externalToolList = assistant.externalTools ?? [];
@@ -339,9 +374,15 @@ export function AssistantRunMonitor({
     queryFn: () => assistantApi(`/api/assistant/automations?app=${encodeURIComponent(app)}`) as Promise<AutomationsPayload>,
   });
 
+  const { data: usageData } = useQuery({
+    queryKey: usageKey,
+    queryFn: () => assistantApi(`/api/assistant/usage?app=${encodeURIComponent(app)}`) as Promise<UsagePayload>,
+  });
+
   const runs = listData?.runs ?? [];
   const ready = listData?.ready ?? true;
   const activeCount = runs.filter((r) => r.status === 'running' || r.status === 'queued').length;
+  const usage = usageData?.usage;
 
   const agentNameOf = useCallback(
     (id: string) => {
@@ -353,9 +394,10 @@ export function AssistantRunMonitor({
 
   const refreshRuns = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: listKey });
+    await queryClient.invalidateQueries({ queryKey: usageKey });
     if (automationCount > 0) await queryClient.invalidateQueries({ queryKey: automationsKey });
     onRunsChanged?.();
-  }, [queryClient, listKey, automationsKey, automationCount, onRunsChanged]);
+  }, [queryClient, listKey, usageKey, automationsKey, automationCount, onRunsChanged]);
 
   const loadDetail = useCallback(
     async (runId: string) => {
@@ -1223,6 +1265,43 @@ export function AssistantRunMonitor({
                   </Button>
                 </div>
               </form>
+
+              {usage && usage.calls > 0 && (
+                <div className="assistant-runs-section">
+                  <h4 className="assistant-runs-section-label">{say('usageHeading')}</h4>
+                  <dl className="assistant-trace-metrics">
+                    <div className="assistant-trace-metric">
+                      <dt>{say('usageCalls')}</dt>
+                      <dd>{usage.calls}</dd>
+                    </div>
+                    <div className="assistant-trace-metric">
+                      <dt>{say('usageTokens')}</dt>
+                      <dd>{formatTokens(usage.totalTokens)}</dd>
+                    </div>
+                    <div className="assistant-trace-metric">
+                      <dt>{say('usageCacheHit')}</dt>
+                      <dd>{`${Math.round(usage.cacheHitRate * 100)}%`}</dd>
+                    </div>
+                    <div className="assistant-trace-metric">
+                      <dt>{say('usageCost')}</dt>
+                      <dd>{formatUsageUsd(usage.estimatedCostUsd)}</dd>
+                    </div>
+                  </dl>
+                  {usage.byModel.length > 0 && (
+                    <div className="assistant-mcp-tools">
+                      {usage.byModel.map((entry) => (
+                        <span key={`${entry.provider}:${entry.model}`} className="assistant-auto-pill">
+                          {say('usageModelPill', {
+                            provider: entry.provider,
+                            model: entry.model,
+                            cost: formatUsageUsd(entry.estimatedCostUsd),
+                          })}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {listLoading ? (
                 <p className="assistant-runs-empty">{say('runsLoading')}</p>

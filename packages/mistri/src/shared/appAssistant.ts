@@ -29,6 +29,8 @@ export const ASSISTANT_BLOCKS = [
   'funnel',
   'board',
   'timeline',
+  'gallery',
+  'calendar',
   'record',
   'callout',
   'tabs',
@@ -63,6 +65,7 @@ export const DEFAULT_TOKENS_PER_PERSON_PER_DAY = 200_000;
 export const ASSISTANT_RETENTION_DAYS = 90;
 const KEYS = [
   'instructions',
+  'roleInstructions',
   'starters',
   'model',
   'provider',
@@ -75,6 +78,7 @@ const KEYS = [
   'roles',
   'tools',
   'exclude',
+  'autoApproveCommands',
   'blocks',
   'placement',
   'limits',
@@ -309,6 +313,8 @@ export interface ServedAssistantAgent {
 export interface AppAssistant {
   /** What the App's assistant is for and how it should answer: the author's words, prefixed by the platform's own rules. */
   instructions?: string;
+  /** Optional role-specific guidance keyed by declared role name (server-only; appended when viewer holds that role). */
+  roleInstructions?: Record<string, string>;
   /** Questions an empty conversation offers, in the App's words: each sent as the person's own when pressed. A bare
       line is offered everywhere, a starter with `views` or `records` only there. */
   starters: Array<string | AssistantStarter>;
@@ -331,6 +337,8 @@ export interface AppAssistant {
   tools: AssistantTool[];
   /** Verbs it may never propose, as `resource.action` (an action's key, or `new` for the New form). */
   exclude: string[];
+  /** Named low-risk business commands allowed to execute directly under the viewer's own grants & row policy. */
+  autoApproveCommands?: string[];
   blocks: AssistantBlockKind[];
   placement: Array<(typeof ASSISTANT_PLACEMENTS)[number]>;
   limits: AssistantLimits;
@@ -1036,6 +1044,8 @@ export function parseAppAssistant(raw: unknown, context: AssistantContext, where
     throw new Error(`${where}.placement includes "panel": the record placement and the page open the same conversation.`);
   const starters = a.starters === undefined ? [] : parseStarters(a.starters, placement, context, `${where}.starters`);
   const exclude = a.exclude === undefined ? [] : parseExclude(a.exclude, context, `${where}.exclude`);
+  const roleInstructions = parseRoleInstructions(a.roleInstructions, context, `${where}.roleInstructions`);
+  const autoApproveCommands = parseAutoApproveCommands(a.autoApproveCommands, `${where}.autoApproveCommands`);
   const limits = parseLimits(a.limits, `${where}.limits`, { tokensPerPersonPerDay: DEFAULT_TOKENS_PER_PERSON_PER_DAY });
   const customBlocks = parseCustomBlocks(a.customBlocks, `${where}.customBlocks`);
   const memory = parseMemory(a.memory, context, `${where}.memory`);
@@ -1058,6 +1068,7 @@ export function parseAppAssistant(raw: unknown, context: AssistantContext, where
   }
   return {
     ...(a.instructions === undefined ? {} : { instructions: (a.instructions as string).trim() }),
+    ...(roleInstructions ? { roleInstructions } : {}),
     starters,
     model: (a.model as string | undefined) ?? DEFAULT_ASSISTANT_MODEL,
     ...(provider ? { provider } : {}),
@@ -1070,6 +1081,7 @@ export function parseAppAssistant(raw: unknown, context: AssistantContext, where
     ...(roles ? { roles } : {}),
     tools,
     exclude,
+    ...(autoApproveCommands ? { autoApproveCommands } : {}),
     blocks,
     placement,
     limits,
@@ -1085,6 +1097,53 @@ export function parseAppAssistant(raw: unknown, context: AssistantContext, where
     ...(skills ? { skills } : {}),
     ...(webhooks ? { webhooks } : {}),
   };
+}
+
+const AUTO_APPROVE_ID = /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$/;
+
+function parseRoleInstructions(raw: unknown, context: AssistantContext, where: string): Record<string, string> | undefined {
+  if (raw === undefined) return undefined;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error(`${where} is a map of role names to instruction strings.`);
+  }
+  const entries = Object.entries(raw as Record<string, unknown>);
+  if (!entries.length || entries.length > 24) {
+    throw new Error(`${where} maps 1 to 24 declared role names to instruction strings.`);
+  }
+  if (!context.roles) {
+    throw new Error(`${where} names roles, and the App declares no "auth" with roles.`);
+  }
+  const out: Record<string, string> = {};
+  for (const [role, value] of entries) {
+    if (!context.roles.includes(role)) {
+      throw new Error(`${where}.${role} names a role "${role}" that is not declared in auth.roles.`);
+    }
+    if (typeof value !== 'string' || !value.trim() || value.trim().length > 2000) {
+      throw new Error(`${where}.${role} is a non-empty instruction string (up to 2,000 characters).`);
+    }
+    out[role] = value.trim();
+  }
+  return out;
+}
+
+function parseAutoApproveCommands(raw: unknown, where: string): string[] | undefined {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw) || !raw.length || raw.length > 20) {
+    throw new Error(`${where} is a list of 1 to 20 command names.`);
+  }
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const item = raw[i];
+    if (typeof item !== 'string' || !AUTO_APPROVE_ID.test(item.trim())) {
+      throw new Error(`${where}[${i}] is a command id or "resource.action" name.`);
+    }
+    const clean = item.trim();
+    if (seen.has(clean)) throw new Error(`${where} lists "${clean}" more than once.`);
+    seen.add(clean);
+    out.push(clean);
+  }
+  return out;
 }
 
 function parseEvalStringList(raw: unknown, where: string): string[] {
@@ -1467,6 +1526,29 @@ function filterSkills(
   return entries.length ? Object.fromEntries(entries) : undefined;
 }
 
+function roleInstructionLines(
+  roleInstructions: Record<string, string> | undefined,
+  viewerRoles: readonly string[] | undefined,
+): string | undefined {
+  if (!roleInstructions || !viewerRoles?.length) return undefined;
+  const matched = Object.entries(roleInstructions)
+    .filter(([role]) => viewerRoles.includes(role))
+    .map(([role, text]) => `Role guidance (${role}): ${text}`);
+  return matched.length ? matched.join('\n') : undefined;
+}
+
+/** Whether a named business command is explicitly allowlisted for direct execution under the viewer's own grants. */
+export function isAutoApprovedCommand(
+  assistant: Pick<AppAssistant, 'autoApproveCommands'>,
+  resource: string,
+  actionId: string,
+  commandId: string | undefined,
+): boolean {
+  const list = assistant.autoApproveCommands;
+  if (!list?.length || !commandId) return false;
+  return list.includes(commandId) || list.includes(`${resource}.${actionId}`) || list.includes(actionId);
+}
+
 export function resolveAgentAssistant(
   base: AppAssistant,
   agentId: string | undefined,
@@ -1474,11 +1556,14 @@ export function resolveAgentAssistant(
 ): { assistant: AppAssistant; agent?: AppAssistantAgent } {
   const filteredExternal = filterExternalTools(base.externalTools, viewerRoles);
   const filteredMcp = filterMcpServers(base.mcpServers, viewerRoles);
+  const roleGuidance = roleInstructionLines(base.roleInstructions, viewerRoles);
   if (!base.agents || !Object.keys(base.agents).length) {
     if (agentId !== undefined) throw new Error('This assistant does not declare named agents.');
     const filteredKnowledge = filterKnowledge(base.knowledge, viewerRoles);
     const filteredSkills = filterSkills(base.skills, viewerRoles);
+    const mergedInstructions = [base.instructions, roleGuidance].filter(Boolean).join('\n\n') || undefined;
     if (
+      mergedInstructions === base.instructions &&
       filteredKnowledge === base.knowledge &&
       filteredExternal === base.externalTools &&
       filteredMcp === base.mcpServers &&
@@ -1488,6 +1573,7 @@ export function resolveAgentAssistant(
     return {
       assistant: {
         ...base,
+        ...(mergedInstructions ? { instructions: mergedInstructions } : {}),
         ...(filteredKnowledge ? { knowledge: filteredKnowledge } : { knowledge: undefined }),
         ...(filteredExternal ? { externalTools: filteredExternal } : { externalTools: undefined }),
         ...(filteredMcp ? { mcpServers: filteredMcp } : { mcpServers: undefined }),
@@ -1511,9 +1597,11 @@ export function resolveAgentAssistant(
   if (!agent) {
     const filteredKnowledge = filterKnowledge(base.knowledge, viewerRoles);
     const filteredSkills = filterSkills(base.skills, viewerRoles);
+    const mergedInstructions = [base.instructions, roleGuidance].filter(Boolean).join('\n\n') || undefined;
     return {
       assistant: {
         ...base,
+        ...(mergedInstructions ? { instructions: mergedInstructions } : {}),
         ...(filteredKnowledge ? { knowledge: filteredKnowledge } : { knowledge: undefined }),
         ...(filteredExternal ? { externalTools: filteredExternal } : { externalTools: undefined }),
         ...(filteredMcp ? { mcpServers: filteredMcp } : { mcpServers: undefined }),
@@ -1531,7 +1619,7 @@ export function resolveAgentAssistant(
   const memory = agent.memory === false ? undefined : base.memory;
   const knowledge = filterKnowledge(base.knowledge, viewerRoles, agent.knowledge);
   const skills = filterSkills(base.skills, viewerRoles, agent.skills);
-  const instructions = [base.instructions, agent.instructions].filter(Boolean).join('\n\n') || undefined;
+  const instructions = [base.instructions, roleGuidance, agent.instructions].filter(Boolean).join('\n\n') || undefined;
   const limits: AssistantLimits = {
     ...(minDefined(base.limits.tokensPerTurn, agent.limits?.tokensPerTurn) !== undefined
       ? { tokensPerTurn: minDefined(base.limits.tokensPerTurn, agent.limits?.tokensPerTurn) }
